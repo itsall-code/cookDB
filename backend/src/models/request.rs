@@ -2,7 +2,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     error::AppError,
-    models::redis::{RedisConfig, ServerConfig},
+    models::{
+        mysql::MySqlConfig,
+        redis::{RedisConfig, ServerConfig},
+    },
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,4 +111,37 @@ pub struct BatchLocalizeRequest {
     pub hash_name: String,
     pub source_fields: Vec<String>,
     pub server: ServerConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MySqlQueryRequest {
+    pub target: MySqlConfig,
+    pub sql: String,
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MySqlExecuteRequest {
+    pub target: MySqlConfig,
+    pub sql: String,
+    pub confirm_text: String,
+}
+
+impl MySqlExecuteRequest {
+    pub fn validate_confirm(&self) -> Result<(), AppError> {
+        let database = self.target.database.as_deref().unwrap_or("");
+        let expected = format!("EXECUTE mysql {} db={}", self.target.host, database);
+        if self.confirm_text != expected {
+            return Err(AppError::BadRequest(format!(
+                "invalid confirm_text, expected: {}",
+                expected
+            )));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MySqlTableListRequest {
+    pub target: MySqlConfig,
 }

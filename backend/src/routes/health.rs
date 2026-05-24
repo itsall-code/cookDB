@@ -6,5 +6,5 @@ pub fn routes() -> Router {
 }
 
 async fn health() -> Json<ApiResponse<String>> {
-    Json(ApiResponse::ok("cookredis-rs is running".to_string()))
+    Json(ApiResponse::ok("cookdb-rs is running".to_string()))
 }

@@ -46,6 +46,12 @@ impl From<redis::RedisError> for AppError {
     }
 }
 
+impl From<sqlx::Error> for AppError {
+    fn from(err: sqlx::Error) -> Self {
+        AppError::Internal(err.to_string())
+    }
+}
+
 impl From<serde_json::Error> for AppError {
     fn from(err: serde_json::Error) -> Self {
         AppError::Internal(err.to_string())

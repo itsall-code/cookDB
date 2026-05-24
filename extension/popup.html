@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CookRedis 测试工具</title>
+  <title>CookDB 测试工具</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body class="popup-body">
   <div class="popup-shell">
     <div class="popup-header">
       <div>
-        <p class="eyebrow">Redis 联调控制台</p>
-        <h1>Cook-Redis 测试工具</h1>
+        <p class="eyebrow">DB 联调控制台</p>
+        <h1>Cook-DB 测试工具</h1>
       </div>
       <div class="link-row">
         <a href="options.html" target="_blank" rel="noopener noreferrer">系统设置</a>
@@ -35,7 +35,7 @@
         <div class="section-heading">
           <div>
             <h2>当前环境</h2>
-            <div class="small">切换前请先在系统设置中保存 Redis 与后端地址。</div>
+            <div class="small">切换前请先在系统设置中保存 Redis、MySQL 与后端地址。</div>
           </div>
           <a class="text-link" href="options.html" target="_blank" rel="noopener noreferrer">编辑配置</a>
         </div>
@@ -51,14 +51,15 @@
       </div>
 
       <div class="section snap-section">
-        <h2>1. 测试 Redis 连接</h2>
-        <div class="small">先连通后端 API，再验证所选 Redis 配置是否可用。</div>
+        <h2>1. 测试数据库连接</h2>
+        <div class="small">先连通后端 API，再验证所选数据库配置是否可用。</div>
         <div class="row">
           <div class="col">
             <label for="testTarget">测试目标</label>
             <select id="testTarget">
               <option value="source">源 Redis</option>
               <option value="target">目标 Redis</option>
+              <option value="mysql">MySQL</option>
             </select>
           </div>
         </div>

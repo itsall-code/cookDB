@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Cook-Redis",
+  "name": "Cook-DB",
   "version": "0.2.0",
-  "description": "Redis browser for Cook-Redis Rust backend",
+  "description": "Database browser for Cook-DB Rust backend",
   "permissions": [
     "storage"
   ],
@@ -11,7 +11,7 @@
     "http://localhost/*"
   ],
   "action": {
-    "default_title": "Cook-Redis 测试工具",
+    "default_title": "Cook-DB 测试工具",
     "default_popup": "popup.html"
   },
   "options_page": "options.html",

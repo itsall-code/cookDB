@@ -18,6 +18,24 @@ function setRedisConfig(prefix, cfg = {}) {
   byId(`${prefix}Db`).value = cfg.db ?? 0;
 }
 
+function getMySqlConfig() {
+  return {
+    host: byId("mysqlHost").value.trim(),
+    port: Number(byId("mysqlPort").value),
+    username: byId("mysqlUsername").value.trim(),
+    password: (byId("mysqlPassword").value.trim() || null),
+    database: (byId("mysqlDatabase").value.trim() || null)
+  };
+}
+
+function setMySqlConfig(cfg = {}) {
+  byId("mysqlHost").value = cfg.host ?? "127.0.0.1";
+  byId("mysqlPort").value = cfg.port ?? 3306;
+  byId("mysqlUsername").value = cfg.username ?? "root";
+  byId("mysqlPassword").value = cfg.password ?? "";
+  byId("mysqlDatabase").value = cfg.database ?? "";
+}
+
 async function getState() {
   const data = await chrome.storage.local.get(["settings", "activeEnv"]);
   return {
@@ -46,6 +64,7 @@ function loadEnvToForm(env) {
   byId("apiBase").value = env.apiBase || "http://127.0.0.1:8642";
   setRedisConfig("source", env.sourceRedis);
   setRedisConfig("target", env.targetRedis);
+  setMySqlConfig(env.mysql);
   byId("platform").value = env.serverConfig?.platform || "local";
   byId("group").value = env.serverConfig?.group || "1";
   byId("server").value = env.serverConfig?.server || "S1";
@@ -60,6 +79,7 @@ function collectEnvFromForm() {
     apiBase: byId("apiBase").value.trim(),
     sourceRedis: getRedisConfig("source"),
     targetRedis: getRedisConfig("target"),
+    mysql: getMySqlConfig(),
     serverConfig: {
       platform: byId("platform").value.trim(),
       group: byId("group").value.trim(),
@@ -84,6 +104,7 @@ async function ensureDefaultState() {
           apiBase: "http://127.0.0.1:8642",
           sourceRedis: { host: "127.0.0.1", port: 6379, password: null, db: 0 },
           targetRedis: { host: "127.0.0.1", port: 6379, password: null, db: 1 },
+          mysql: { host: "127.0.0.1", port: 3306, username: "root", password: null, database: null },
           serverConfig: { platform: "local", group: "1", server: "S1", pre_login: "local_" },
           defaultHashName: "Account",
           defaultTables: ["Account"],
@@ -173,7 +194,7 @@ async function exportConfig() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "cookredis-settings.json";
+  a.download = "cookdb-settings.json";
   a.click();
   URL.revokeObjectURL(url);
   setStatus("配置已导出", true, false);
@@ -203,4 +224,3 @@ document.addEventListener("DOMContentLoaded", async () => {
   byId("importBtn").addEventListener("click", importConfig);
   byId("importFile").addEventListener("change", handleImportFile);
 });
-

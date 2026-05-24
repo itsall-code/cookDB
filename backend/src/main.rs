@@ -18,11 +18,12 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .merge(routes::health::routes())
         .merge(routes::redis::routes())
+        .merge(routes::mysql::routes())
         .merge(routes::process::routes())
         .layer(CorsLayer::permissive());
 
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
-    println!("CookRedis Rust server listening on http://{}", bind_addr);
+    println!("CookDB Rust server listening on http://{}", bind_addr);
 
     axum::serve(listener, app).await?;
 

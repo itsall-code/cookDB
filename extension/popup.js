@@ -55,6 +55,7 @@ function defaultEnv() {
     apiBase: "http://127.0.0.1:8642",
     sourceRedis: { host: "127.0.0.1", port: 6379, password: null, db: 0 },
     targetRedis: { host: "127.0.0.1", port: 6379, password: null, db: 1 },
+    mysql: { host: "127.0.0.1", port: 3306, username: "root", password: null, database: null },
     serverConfig: { platform: "local", group: "1", server: "S1", pre_login: "local_" },
     defaultHashName: "Account",
     defaultTables: ["Account"],
@@ -199,6 +200,16 @@ function normalizeRedisConfig(cfg = {}) {
   };
 }
 
+function normalizeMySqlConfig(cfg = {}) {
+  return {
+    host: String(cfg.host || "").trim(),
+    port: Number(cfg.port || 3306),
+    username: String(cfg.username || "").trim(),
+    password: cfg.password || null,
+    database: cfg.database || null,
+  };
+}
+
 function buildServerConfig() {
   const server = getActiveEnv().serverConfig || {};
   return {
@@ -239,6 +250,10 @@ function targetRedisConfig() {
   return normalizeRedisConfig(getActiveEnv().targetRedis);
 }
 
+function mysqlConfig() {
+  return normalizeMySqlConfig(getActiveEnv().mysql);
+}
+
 function validateRedisConfig(cfg, label) {
   if (!cfg.host) {
     throw new Error(`${label} host 不能为空`);
@@ -246,6 +261,12 @@ function validateRedisConfig(cfg, label) {
   if (!cfg.port) {
     throw new Error(`${label} port 不能为空`);
   }
+}
+
+function validateMySqlConfig(cfg) {
+  if (!cfg.host) throw new Error("MySQL host 不能为空");
+  if (!cfg.port) throw new Error("MySQL port 不能为空");
+  if (!cfg.username) throw new Error("MySQL username 不能为空");
 }
 
 function validateServerConfig(serverCfg) {
@@ -304,12 +325,23 @@ function buildBatchLocalizePayload() {
 
 function buildTestRedisPayload() {
   const targetType = els.testTarget?.value || "source";
+  if (targetType === "mysql") {
+    const config = mysqlConfig();
+    validateMySqlConfig(config);
+    return {
+      target: "mysql",
+      config,
+      url: "/api/mysql/test",
+    };
+  }
+
   const config = targetType === "target" ? targetRedisConfig() : sourceRedisConfig();
   validateRedisConfig(config, `${targetType} Redis`);
 
   return {
     target: targetType,
-    redis_config: config,
+    config,
+    url: "/api/redis/test",
   };
 }
 
@@ -428,18 +460,15 @@ function toggleViewerSection() {
 async function refreshBackendStatus() {
   setBackendStatus("检查中...", false, false);
 
-  const source = sourceRedisConfig();
-  if (!source.host) {
-    setBackendStatus("未配置 source Redis", false, true);
-    return;
-  }
-
-  const result = await apiFetch("/api/redis/test", source, 15_000);
-
-  if (result.ok) {
+  try {
+    const response = await fetch(apiUrl("/api/health"));
+    if (!response.ok) {
+      setBackendStatus(`HTTP ${response.status}`, false, true);
+      return;
+    }
     setBackendStatus("可用", true, false);
-  } else {
-    setBackendStatus(result.error || "不可用", false, true);
+  } catch (error) {
+    setBackendStatus(error.message || "不可用", false, true);
   }
 }
 
@@ -482,10 +511,12 @@ function renderEnvSummary() {
   const env = getActiveEnv();
   const source = normalizeRedisConfig(env.sourceRedis);
   const target = normalizeRedisConfig(env.targetRedis);
+  const mysql = normalizeMySqlConfig(env.mysql);
   els.envSummary.innerHTML = `
     <span>接口：${escapeHtml(normalizeApiBase(env.apiBase))}</span>
     <span>源：${escapeHtml(source.host)}:${source.port} / DB ${source.db}</span>
     <span>目标：${escapeHtml(target.host)}:${target.port} / DB ${target.db}</span>
+    <span>MySQL：${escapeHtml(mysql.host)}:${mysql.port} / ${escapeHtml(mysql.database || "-")}</span>
   `;
 }
 
@@ -532,19 +563,19 @@ async function testRedisConnection() {
   await withButtonLoading(els.testRedisBtn, async () => {
     try {
       const payload = buildTestRedisPayload();
-      appendLog(`开始测试 ${payload.target} Redis 连接...`, "info");
+      appendLog(`开始测试 ${payload.target} 连接...`, "info");
 
-      const result = await apiFetch("/api/redis/test", payload.redis_config, 20_000);
+      const result = await apiFetch(payload.url, payload.config, 20_000);
 
       if (!result.ok) {
-        appendLog(`Redis 连接失败：${result.error}`, "error");
+        appendLog(`${payload.target} 连接失败：${result.error}`, "error");
         return;
       }
 
-      appendLog(`${payload.target} Redis 连接成功`, "ok");
+      appendLog(`${payload.target} 连接成功`, "ok");
       setBackendStatus("可用", true, false);
     } catch (error) {
-      appendLog(`Redis 连接失败：${error.message}`, "error");
+      appendLog(`连接失败：${error.message}`, "error");
     }
   }, "测试中...");
 }
