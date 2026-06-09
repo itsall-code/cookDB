@@ -2,6 +2,8 @@ function byId(id) { return document.getElementById(id); }
 function linesToArray(text) { return text.split(/\r?\n/).map(s => s.trim()).filter(Boolean); }
 function arrayToLines(arr) { return (arr || []).join("\n"); }
 
+let editingMysqlConnId = null;
+
 function getRedisConfig(prefix) {
   return {
     host: byId(`${prefix}Host`).value.trim(),
@@ -36,14 +38,6 @@ function setMySqlConfig(cfg = {}) {
   byId("mysqlDatabase").value = cfg.database ?? "";
 }
 
-async function getState() {
-  const data = await chrome.storage.local.get(["settings", "activeEnv"]);
-  return {
-    settings: data.settings || { envs: {} },
-    activeEnv: data.activeEnv || "dev"
-  };
-}
-
 async function saveState(settings, activeEnv) {
   await chrome.storage.local.set({ settings, activeEnv });
 }
@@ -60,11 +54,35 @@ function fillEnvSelect(envs, activeEnv) {
   });
 }
 
+function fillMysqlConnSelect(connections, activeId) {
+  const select = byId("mysqlConnSelect");
+  select.innerHTML = "";
+  connections.forEach((conn) => {
+    const opt = document.createElement("option");
+    opt.value = conn.id;
+    opt.textContent = conn.name;
+    if (conn.id === activeId) opt.selected = true;
+    select.appendChild(opt);
+  });
+}
+
+function loadMysqlConnToForm(conn = {}) {
+  byId("mysqlConnName").value = conn.name ?? "local";
+  setMySqlConfig(conn);
+}
+
+function collectMysqlConnFromForm() {
+  return {
+    id: editingMysqlConnId || crypto.randomUUID(),
+    name: byId("mysqlConnName").value.trim() || "local",
+    ...getMySqlConfig(),
+  };
+}
+
 function loadEnvToForm(env) {
   byId("apiBase").value = env.apiBase || "http://127.0.0.1:8642";
   setRedisConfig("source", env.sourceRedis);
   setRedisConfig("target", env.targetRedis);
-  setMySqlConfig(env.mysql);
   byId("platform").value = env.serverConfig?.platform || "local";
   byId("group").value = env.serverConfig?.group || "1";
   byId("server").value = env.serverConfig?.server || "S1";
@@ -93,33 +111,8 @@ function collectEnvFromForm() {
 }
 
 async function ensureDefaultState() {
-  const data = await chrome.storage.local.get(["settings", "activeEnv"]);
-  let settings = data.settings;
-  let activeEnv = data.activeEnv;
-
-  if (!settings || !settings.envs || Object.keys(settings.envs).length === 0) {
-    settings = {
-      envs: {
-        dev: {
-          apiBase: "http://127.0.0.1:8642",
-          sourceRedis: { host: "127.0.0.1", port: 6379, password: null, db: 0 },
-          targetRedis: { host: "127.0.0.1", port: 6379, password: null, db: 1 },
-          mysql: { host: "127.0.0.1", port: 3306, username: "root", password: null, database: null },
-          serverConfig: { platform: "local", group: "1", server: "S1", pre_login: "local_" },
-          defaultHashName: "Account",
-          defaultTables: ["Account"],
-          defaultDeleteKeys: []
-        }
-      }
-    };
-    activeEnv = "dev";
-    await chrome.storage.local.set({ settings, activeEnv });
-  } else if (!activeEnv || !settings.envs[activeEnv]) {
-    activeEnv = Object.keys(settings.envs)[0];
-    await chrome.storage.local.set({ settings, activeEnv });
-  }
-
-  return { settings, activeEnv };
+  const loaded = await loadAppState();
+  return { settings: loaded.settings, activeEnv: loaded.activeEnv };
 }
 
 async function getState() {
@@ -130,13 +123,37 @@ async function refreshForm() {
   const { settings, activeEnv } = await getState();
   fillEnvSelect(settings.envs, activeEnv);
   loadEnvToForm(settings.envs[activeEnv]);
+
+  const connections = settings.mysqlConnections || [];
+  if (!editingMysqlConnId || !connections.some((c) => c.id === editingMysqlConnId)) {
+    editingMysqlConnId = connections[0]?.id || null;
+  }
+  fillMysqlConnSelect(connections, editingMysqlConnId);
+  const activeConn = connections.find((c) => c.id === editingMysqlConnId) || connections[0];
+  if (activeConn) loadMysqlConnToForm(activeConn);
+}
+
+function persistMysqlConnDraft(settings, activeEnv) {
+  const connections = settings.mysqlConnections || [];
+  const draft = collectMysqlConnFromForm();
+  const idx = connections.findIndex((c) => c.id === draft.id);
+  if (idx >= 0) connections[idx] = draft;
+  else connections.push(draft);
+  settings.mysqlConnections = connections;
+  if (settings.envs[activeEnv]) {
+    settings.envs[activeEnv].mysql = getMySqlConfig();
+  }
+  editingMysqlConnId = draft.id;
+  return settings;
 }
 
 async function saveCurrentEnv() {
   const { settings, activeEnv } = await getState();
   settings.envs[activeEnv] = collectEnvFromForm();
+  persistMysqlConnDraft(settings, activeEnv);
   await saveState(settings, activeEnv);
   setStatus("设置已保存", true);
+  await refreshForm();
 }
 
 function setStatus(text, ok = false, error = false) {
@@ -213,6 +230,67 @@ async function handleImportFile(event) {
   setStatus("配置已导入", true, false);
 }
 
+async function addMysqlConn() {
+  const { settings, activeEnv } = await getState();
+  const name = `conn-${(settings.mysqlConnections?.length || 0) + 1}`;
+  const conn = {
+    id: crypto.randomUUID(),
+    name,
+    host: "127.0.0.1",
+    port: 3306,
+    username: "root",
+    password: null,
+    database: null,
+  };
+  settings.mysqlConnections = [...(settings.mysqlConnections || []), conn];
+  editingMysqlConnId = conn.id;
+  await saveState(settings, activeEnv);
+  await refreshForm();
+  setStatus(`已新增连接 ${name}`, true);
+}
+
+async function deleteMysqlConn() {
+  const { settings, activeEnv } = await getState();
+  const connections = settings.mysqlConnections || [];
+  if (connections.length <= 1) return setStatus("至少保留一个 MySQL 连接", false, true);
+  settings.mysqlConnections = connections.filter((c) => c.id !== editingMysqlConnId);
+  editingMysqlConnId = settings.mysqlConnections[0].id;
+  await saveState(settings, activeEnv);
+  await refreshForm();
+  setStatus("连接已删除", true);
+}
+
+async function switchMysqlConn() {
+  const { settings, activeEnv } = await getState();
+  persistMysqlConnDraft(settings, activeEnv);
+  editingMysqlConnId = byId("mysqlConnSelect").value;
+  await saveState(settings, activeEnv);
+  const conn = settings.mysqlConnections.find((c) => c.id === editingMysqlConnId);
+  loadMysqlConnToForm(conn);
+  setStatus(`已切换连接 ${conn?.name || ""}`, true);
+}
+
+async function testMysqlConn() {
+  const { settings, activeEnv } = await getState();
+  persistMysqlConnDraft(settings, activeEnv);
+  await saveState(settings, activeEnv);
+  const conn = collectMysqlConnFromForm();
+  const apiBase = byId("apiBase").value.trim();
+  setStatus("正在测试 MySQL 连接...");
+  try {
+    const resp = await fetch(`${apiBase.replace(/\/+$/, "")}/api/mysql/test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(connectionToTarget(conn)),
+    });
+    const payload = await resp.json();
+    if (!resp.ok || payload.success === false) throw new Error(payload.message || `HTTP ${resp.status}`);
+    setStatus(payload.message || "MySQL 连接成功", true);
+  } catch (err) {
+    setStatus(`MySQL 连接失败: ${err.message}`, false, true);
+  }
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   await refreshForm();
   byId("saveBtn").addEventListener("click", saveCurrentEnv);
@@ -223,4 +301,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   byId("exportBtn").addEventListener("click", exportConfig);
   byId("importBtn").addEventListener("click", importConfig);
   byId("importFile").addEventListener("change", handleImportFile);
+  byId("mysqlConnSelect").addEventListener("change", switchMysqlConn);
+  byId("addMysqlConnBtn").addEventListener("click", addMysqlConn);
+  byId("deleteMysqlConnBtn").addEventListener("click", deleteMysqlConn);
+  byId("testMysqlConnBtn").addEventListener("click", testMysqlConn);
 });

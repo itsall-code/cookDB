@@ -113,6 +113,13 @@ pub struct BatchLocalizeRequest {
     pub server: ServerConfig,
 }
 
+fn is_dangerous_mutation(sql: &str) -> bool {
+    let lower = sql.trim().to_ascii_lowercase();
+    ["delete", "truncate", "drop"]
+        .iter()
+        .any(|prefix| lower.starts_with(prefix))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MySqlQueryRequest {
     pub target: MySqlConfig,
@@ -125,12 +132,55 @@ pub struct MySqlExecuteRequest {
     pub target: MySqlConfig,
     pub sql: String,
     pub confirm_text: String,
+    #[serde(default)]
+    pub allow_dangerous: bool,
 }
 
 impl MySqlExecuteRequest {
     pub fn validate_confirm(&self) -> Result<(), AppError> {
         let database = self.target.database.as_deref().unwrap_or("");
-        let expected = format!("EXECUTE mysql {} db={}", self.target.host, database);
+        let dangerous = is_dangerous_mutation(&self.sql);
+        let expected = if dangerous && self.allow_dangerous {
+            format!(
+                "DANGEROUS EXECUTE mysql {} db={}",
+                self.target.host, database
+            )
+        } else {
+            format!("EXECUTE mysql {} db={}", self.target.host, database)
+        };
+        if self.confirm_text != expected {
+            return Err(AppError::BadRequest(format!(
+                "invalid confirm_text, expected: {}",
+                expected
+            )));
+        }
+        if dangerous && !self.allow_dangerous {
+            return Err(AppError::BadRequest(
+                "dangerous statement requires allow_dangerous=true".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MySqlImportFileRequest {
+    pub target: MySqlConfig,
+    pub file_path: String,
+    pub confirm_text: String,
+}
+
+impl MySqlImportFileRequest {
+    pub fn validate_confirm(&self) -> Result<(), AppError> {
+        let database = self.target.database.as_deref().unwrap_or("");
+        let file_name = std::path::Path::new(self.file_path.trim())
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or(self.file_path.trim());
+        let expected = format!(
+            "IMPORT mysql {} db={} file={}",
+            self.target.host, database, file_name
+        );
         if self.confirm_text != expected {
             return Err(AppError::BadRequest(format!(
                 "invalid confirm_text, expected: {}",
@@ -139,6 +189,11 @@ impl MySqlExecuteRequest {
         }
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MySqlImportJobRequest {
+    pub job_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

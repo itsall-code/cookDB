@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MySQL 工作台 · Cook-DB</title>
+  <link rel="stylesheet" href="mysql.css" />
+</head>
+<body>
+  <div class="wb-shell">
+    <aside class="wb-sidebar">
+      <div class="wb-brand">
+        <p class="eyebrow">Cook-DB Workbench</p>
+        <h1>MySQL 工作台</h1>
+        <p>高性能 SQL 查询、执行与本地 dump 导入。大文件由后端流式解析，避免浏览器内存瓶颈。</p>
+      </div>
+
+      <div class="wb-panel">
+        <h3>当前连接</h3>
+        <select id="connectionSelect" class="wb-connection-select"></select>
+        <div id="connectionMeta" class="wb-connection-meta"></div>
+      </div>
+
+      <div class="wb-panel">
+        <h3>SQL 历史</h3>
+        <div class="wb-actions" style="margin-top:0;margin-bottom:8px;">
+          <label class="wb-checkbox">
+            <input id="historyFavoriteOnly" type="checkbox" />
+            仅收藏
+          </label>
+        </div>
+        <div id="historyList" class="wb-history-list"></div>
+      </div>
+
+      <div class="wb-sidebar-footer">
+        <a href="options.html" target="_blank" rel="noopener noreferrer">管理连接与环境</a>
+        <a href="popup.html" target="_blank" rel="noopener noreferrer">返回 Redis 面板</a>
+      </div>
+    </aside>
+
+    <main class="wb-main">
+      <div class="wb-topbar">
+        <div>
+          <h2>数据库操作中心</h2>
+          <div class="subtitle">查询结果前端分页排序；SQL 文件走后端流式导入与批量事务提交。</div>
+        </div>
+        <div id="statusPill" class="wb-status-pill">
+          <span class="dot"></span>
+          <span id="statusText">就绪</span>
+        </div>
+      </div>
+
+      <section class="wb-card">
+        <div class="wb-tabs">
+          <button type="button" class="active" data-tab="query">查询</button>
+          <button type="button" data-tab="execute">执行</button>
+          <button type="button" data-tab="import">导入 SQL 文件</button>
+        </div>
+
+        <div id="tab-query" class="wb-tab-panel active">
+          <div class="wb-editor-wrap">
+            <div class="wb-editor-toolbar">
+              <span class="label">SELECT only · 默认 LIMIT 200</span>
+              <button type="button" class="secondary" id="loadTablesBtn">加载表列表</button>
+            </div>
+            <textarea id="queryEditor" class="wb-editor" spellcheck="false" placeholder="SELECT * FROM account LIMIT 20"></textarea>
+          </div>
+          <div class="wb-actions">
+            <button type="button" class="primary" id="runQueryBtn">运行查询</button>
+            <button type="button" class="secondary" id="exportCsvBtn">导出 CSV</button>
+          </div>
+          <div id="queryMeta" class="wb-result-meta"></div>
+          <div id="queryTableWrap" class="wb-table-wrap">
+            <div class="wb-empty">查询结果将显示在这里</div>
+          </div>
+          <div class="wb-pagination">
+            <button type="button" class="secondary" id="queryPrevBtn">上一页</button>
+            <span id="queryPageInfo" class="subtitle">第 0 / 0 页</span>
+            <button type="button" class="secondary" id="queryNextBtn">下一页</button>
+          </div>
+        </div>
+
+        <div id="tab-execute" class="wb-tab-panel">
+          <div class="wb-editor-wrap">
+            <div class="wb-editor-toolbar">
+              <span class="label">Mutation / DDL · 需要确认码</span>
+            </div>
+            <textarea id="executeEditor" class="wb-editor" spellcheck="false" placeholder="UPDATE player SET gold = 999999 WHERE uid = 10001"></textarea>
+          </div>
+          <div class="wb-actions">
+            <button type="button" class="primary" id="runExecuteBtn">执行语句</button>
+            <label class="wb-checkbox">
+              <input id="allowDangerous" type="checkbox" />
+              允许危险语句 (DELETE/TRUNCATE/DROP)
+            </label>
+          </div>
+          <div id="executeResult" class="wb-empty">执行结果将显示在这里</div>
+        </div>
+
+        <div id="tab-import" class="wb-tab-panel">
+          <div class="wb-import-grid">
+            <div class="wb-import-path">
+              <label for="importPath">服务器本地 SQL 文件路径</label>
+              <input id="importPath" type="text" value="data/test_data.sql" placeholder="data/test_data.sql 或绝对路径" />
+              <div class="subtitle">
+                1.4GB 级 dump 请勿通过浏览器上传。填写后端可访问的路径，由 Rust 流式读取（1MB 缓冲 + 200 条/批事务）。
+              </div>
+              <div class="wb-actions">
+                <button type="button" class="primary" id="startImportBtn">开始导入</button>
+                <button type="button" class="danger" id="cancelImportBtn" disabled>取消导入</button>
+              </div>
+              <div id="importConfirmHint" class="subtitle"></div>
+            </div>
+
+            <div class="wb-progress-card">
+              <h4>导入进度</h4>
+              <div class="wb-progress-bar"><span id="importProgressBar"></span></div>
+              <div class="wb-stat-grid">
+                <div class="wb-stat">
+                  <div class="label">状态</div>
+                  <div class="value" id="importStatus">idle</div>
+                </div>
+                <div class="wb-stat">
+                  <div class="label">进度</div>
+                  <div class="value" id="importPercent">0%</div>
+                </div>
+                <div class="wb-stat">
+                  <div class="label">速度</div>
+                  <div class="value" id="importSpeed">0 B/s</div>
+                </div>
+                <div class="wb-stat">
+                  <div class="label">预计剩余</div>
+                  <div class="value" id="importEta">--</div>
+                </div>
+                <div class="wb-stat">
+                  <div class="label">已执行语句</div>
+                  <div class="value" id="importStatements">0</div>
+                </div>
+                <div class="wb-stat">
+                  <div class="label">已跳过</div>
+                  <div class="value" id="importSkipped">0</div>
+                </div>
+              </div>
+              <div id="importPreview" class="subtitle" style="margin-top:12px;color:#94a3b8;"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="wb-toast"></div>
+  <script src="shared.js"></script>
+  <script src="mysql.js"></script>
+</body>
+</html>

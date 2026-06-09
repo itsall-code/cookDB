@@ -1,0 +1,45 @@
+---
+description: Cook-Tools 项目总览、技术栈与安全约定
+alwaysApply: true
+---
+
+# Cook-Tools
+
+游戏测试/联调数据库工具（cook-redis → cook-tools）。
+
+## 技术栈
+
+- **后端**：Rust + Axum + sqlx + redis crate，`backend/` 默认 `:8642`
+- **前端**：Chrome MV3 扩展，原生 HTML/CSS/JS，`extension/`
+- **配置**：`chrome.storage.local`（扩展）+ `backend/config/app.json`
+
+不要引入 Vue/Electron/mysql2/TypeORM，除非用户明确要求重写架构。
+
+## 目录
+
+| 路径 | 职责 |
+|------|------|
+| `backend/src/routes/` | HTTP 路由（薄层） |
+| `backend/src/services/` | 业务逻辑 |
+| `backend/src/models/` | 请求/响应结构体 |
+| `extension/popup.*` | 主操作面板 |
+| `extension/options.*` | 多环境配置 |
+
+## 安全
+
+- 本地工具场景，CORS 宽松，勿直接暴露公网
+- `FLUSHDB`、`DELETE`、`DROP` 等危险操作必须二次确认
+- MySQL P0：`DELETE`/`TRUNCATE`/`DROP` 默认禁止，需显式解锁
+
+## 新功能流程
+
+1. 读 `.cursor/skills/cook-tools/gap-analysis.md` 确认缺口
+2. 后端：model → service → route → `cargo check`
+3. 扩展：UI → `fetch` → 日志展示
+4. 有新区间则更新 `README.md`
+
+## 详细文档
+
+- 路线图：`.cursor/skills/cook-tools/roadmap.md`
+- 架构/API：`.cursor/skills/cook-tools/architecture.md`
+- 分阶段实现：`.cursor/skills/mysql-p0|p1|p2/SKILL.md`

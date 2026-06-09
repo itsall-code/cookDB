@@ -1,0 +1,30 @@
+---
+description: MySQL 功能分阶段路线图与验收标准
+globs: backend/**/mysql*,extension/mysql*,.cursor/skills/mysql*/**
+alwaysApply: false
+---
+
+# MySQL 路线图
+
+完整需求见 `.cursor/skills/cook-tools/roadmap.md`，差距见 `gap-analysis.md`。
+
+## 实现顺序
+
+| 阶段 | 内容 | Skill |
+|------|------|-------|
+| P0 | 多连接、SQL 查询/执行 UI、历史、危险语句拦截 | `mysql-p0` |
+| P1 | 游戏脚本、模板库、快照 diff、UID 联动 | `mysql-p1` |
+| P2 | Excel 导出、账号对比、批量 UID 执行 | `mysql-p2` |
+
+## P0 验收要点
+
+- [ ] 命名连接 CRUD + 测试（dev/test/staging/local）
+- [ ] SQL 工作台：查询表格（分页/排序/复制）、执行确认
+- [ ] `DELETE`/`TRUNCATE`/`DROP` 默认拒绝
+- [ ] 历史 1000 条 + 收藏 + 快速重执行
+
+## 现有 API（无需重复造轮子）
+
+`POST /api/mysql/test|tables|query|execute` — 详见 `architecture.md`。
+
+后端保持无状态，连接信息每次请求由扩展传入 `target`。

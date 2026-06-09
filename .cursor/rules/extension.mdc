@@ -1,0 +1,37 @@
+---
+description: Chrome 扩展开发约定（配置、API 调用、UI）
+globs: extension/**
+alwaysApply: false
+---
+
+# Extension 约定
+
+## 配置存储
+
+`chrome.storage.local`：
+
+```javascript
+{ envs: { [name]: EnvConfig }, activeEnv: "dev" }
+```
+
+`EnvConfig`：`apiBase`、`sourceRedis`、`targetRedis`、`mysql`、`serverConfig`。
+
+## API 调用
+
+- 基址：`apiUrl(path)` → `normalizeApiBase(env.apiBase) + path`
+- 超时：`DEFAULT_TIMEOUT`（60s）、`LONG_TIMEOUT`（300s）
+- 错误展示：写入 `#log` 面板
+
+## UI
+
+- 复用 `section` / `row` / `col` / `warning-box` 样式（`style.css`）
+- 中文文案，与 popup 风格一致
+- 新功能推荐独立页面（如 `mysql.html`），在 `manifest.json` 注册
+
+## MySQL 工作台（待实现）
+
+- 连接 CRUD 在 `options.js`
+- SQL 查询/执行/历史在专用页面
+- 历史存 `chrome.storage`，最多 1000 条，收藏不淘汰
+
+详见 `.cursor/skills/mysql-p0/SKILL.md`。

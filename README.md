@@ -392,11 +392,31 @@ curl -X POST http://127.0.0.1:8642/api/mysql/query \
 
 仅允许单条 `INSERT`、`UPDATE`、`DELETE`、`REPLACE` 或 DDL 语句，并要求 `confirm_text` 严格匹配 `EXECUTE mysql <host> db=<database>`。
 
+`DELETE` / `TRUNCATE` / `DROP` 默认拒绝；需设置 `allow_dangerous: true` 且确认码为 `DANGEROUS EXECUTE mysql <host> db=<database>`。
+
 ```bash
 curl -X POST http://127.0.0.1:8642/api/mysql/execute \
   -H 'Content-Type: application/json' \
   -d '{"target":{"host":"127.0.0.1","port":3306,"username":"root","password":null,"database":"test"},"sql":"UPDATE users SET flag = 1 WHERE id = 1","confirm_text":"EXECUTE mysql 127.0.0.1 db=test"}'
 ```
+
+### MySQL 流式导入 SQL 文件
+
+大体积 dump（如 `data/test_data.sql`）由后端本地路径流式读取，1MB 分块解析 + 200 条/批事务提交，避免经浏览器上传。
+
+#### `POST /api/mysql/import-file`
+
+确认码：`IMPORT mysql <host> db=<database> file=<文件名>`
+
+```bash
+curl -X POST http://127.0.0.1:8642/api/mysql/import-file \
+  -H 'Content-Type: application/json' \
+  -d '{"target":{"host":"127.0.0.1","port":3306,"username":"root","password":null,"database":"37wan_70001"},"file_path":"data/test_data.sql","confirm_text":"IMPORT mysql 127.0.0.1 db=37wan_70001 file=test_data.sql"}'
+```
+
+#### `POST /api/mysql/import-file/status` / `cancel`
+
+请求体：`{"job_id":"<uuid>"}`。返回进度字段含 `bytes_read`、`file_size`、`statements_executed`、`bytes_per_sec`、`eta_sec`。
 
 ### Redis 连接测试
 

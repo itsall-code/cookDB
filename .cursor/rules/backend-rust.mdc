@@ -1,0 +1,41 @@
+---
+description: Rust 后端开发约定（Axum、API、MySQL/Redis 服务）
+globs: backend/**
+alwaysApply: false
+---
+
+# Backend Rust 约定
+
+## 分层
+
+```
+routes/*.rs  →  services/*.rs  →  sqlx / redis
+models/request.rs, models/response.rs
+```
+
+新增 API：route → service 函数 → request model → README。
+
+## 响应格式
+
+成功：`ApiResponse<T>` → `{ "success": true, "data": T, "message": "..." }`
+错误：`AppError` → `{ "success": false, "message": "..." }`
+
+## 危险操作 confirm_text
+
+必须严格匹配，参考现有实现：
+
+```rust
+// FlushDb: "FLUSHDB db={db} host={host}"
+// MySqlExecute: "EXECUTE mysql {host} db={database}"
+```
+
+## MySQL 校验（mysql_service.rs）
+
+- 查询：仅单条 `SELECT`，禁止 `;` 多语句，自动 LIMIT（默认 200，最大 1000）
+- 执行：单条 mutation/DDL；P0 需拦截 `DELETE`/`TRUNCATE`/`DROP`（除非 `allow_dangerous`）
+
+## 检查
+
+```bash
+cd backend && cargo fmt && cargo check
+```
