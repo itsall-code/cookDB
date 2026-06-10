@@ -32,6 +32,14 @@
         <div id="historyList" class="wb-history-list"></div>
       </div>
 
+      <div class="wb-panel">
+        <h3>清库</h3>
+        <div class="subtitle" style="color:#f87171;margin-bottom:10px;">
+          危险操作：删除当前连接所选数据库中的全部表，不可恢复。
+        </div>
+        <button type="button" class="danger" id="flushDbBtn" style="width:100%;">清空当前库</button>
+      </div>
+
       <div class="wb-sidebar-footer">
         <a href="options.html" target="_blank" rel="noopener noreferrer">管理连接与环境</a>
         <a href="popup.html" target="_blank" rel="noopener noreferrer">返回 Redis 面板</a>

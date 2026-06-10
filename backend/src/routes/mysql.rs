@@ -9,8 +9,8 @@ use crate::{
     models::{
         mysql::MySqlConfig,
         request::{
-            MySqlExecuteRequest, MySqlImportFileRequest, MySqlImportJobRequest, MySqlQueryRequest,
-            MySqlTableListRequest,
+            MySqlExecuteRequest, MySqlFlushDbRequest, MySqlImportFileRequest, MySqlImportJobRequest,
+            MySqlQueryRequest, MySqlTableListRequest,
         },
         response::ApiResponse,
     },
@@ -25,6 +25,7 @@ pub fn routes() -> Router {
         .route("/api/mysql/tables", post(list_tables))
         .route("/api/mysql/query", post(query_rows))
         .route("/api/mysql/execute", post(execute_statement))
+        .route("/api/mysql/flush-db", post(flush_database))
         .route("/api/mysql/import-file", post(start_import_file))
         .route("/api/mysql/import-file/status", post(import_file_status))
         .route("/api/mysql/import-file/cancel", post(cancel_import_file))
@@ -90,6 +91,18 @@ async fn execute_statement(
     Ok(Json(ApiResponse::ok_with_message(
         result,
         "MySQL statement executed".to_string(),
+    )))
+}
+
+async fn flush_database(
+    Json(req): Json<MySqlFlushDbRequest>,
+) -> Result<Json<ApiResponse<mysql_service::MySqlFlushDbResult>>, AppError> {
+    warn!(target = %mysql_target(&req.target), "api mysql flush-db");
+    req.validate_confirm()?;
+    let result = mysql_service::flush_database(&req.target).await?;
+    Ok(Json(ApiResponse::ok_with_message(
+        result,
+        "MySQL database flushed".to_string(),
     )))
 }
 

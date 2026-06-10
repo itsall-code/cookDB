@@ -55,8 +55,49 @@ function setStatus(text, mode = "idle") {
 }
 
 function getActiveConnection() {
+  if (!appState?.settings) return null;
   const list = appState.settings.mysqlConnections || [];
-  return list.find((c) => c.id === appState.mysqlActiveConnectionId) || list[0];
+  return list.find((c) => c.id === appState.mysqlActiveConnectionId) || list[0] || null;
+}
+
+function getEditor(id) {
+  return document.getElementById(id);
+}
+
+function getEditorSql(id) {
+  return getEditor(id)?.value.trim() || "";
+}
+
+function normalizeQueryResult(data) {
+  const rows = data?.rows ?? [];
+  const columns = data?.columns ?? [];
+  return {
+    columns,
+    rows,
+    limited: Boolean(data?.limited),
+    rowCount: data?.rowCount ?? data?.row_count ?? rows.length,
+  };
+}
+
+function normalizeExecuteResult(data) {
+  return {
+    rowsAffected: data?.rowsAffected ?? data?.rows_affected ?? 0,
+    lastInsertId: data?.lastInsertId ?? data?.last_insert_id ?? 0,
+  };
+}
+
+function seedQueryEditor() {
+  const editor = getEditor("queryEditor");
+  if (!editor || editor.value.trim()) return;
+
+  const lastQuery = (appState?.sqlHistory || []).find((item) => item.type === "query");
+  if (lastQuery?.sql) {
+    editor.value = lastQuery.sql;
+    return;
+  }
+
+  const placeholder = editor.getAttribute("placeholder")?.trim();
+  editor.value = placeholder || "SELECT 1 AS ok";
 }
 
 function renderConnections() {
@@ -109,10 +150,12 @@ function renderHistory() {
     row.addEventListener("click", () => {
       if (item.type === "execute") {
         switchTab("execute");
-        els.executeEditor.value = item.sql;
+        const editor = getEditor("executeEditor");
+        if (editor) editor.value = item.sql;
       } else {
         switchTab("query");
-        els.queryEditor.value = item.sql;
+        const editor = getEditor("queryEditor");
+        if (editor) editor.value = item.sql;
       }
     });
     row.addEventListener("contextmenu", async (event) => {
@@ -218,8 +261,14 @@ function renderQueryTable() {
 
 async function runQuery() {
   const conn = getActiveConnection();
-  const sql = els.queryEditor.value.trim();
-  if (!conn || !sql) return showToast("请填写连接与 SQL", false);
+  if (!conn) return showToast("请先在设置页添加 MySQL 连接", false);
+
+  let sql = getEditorSql("queryEditor");
+  if (!sql) {
+    seedQueryEditor();
+    sql = getEditorSql("queryEditor");
+    if (!sql) return showToast("请先输入 SQL，或点击「加载表列表」快速生成", false);
+  }
 
   setStatus("查询中...", "busy");
   const started = performance.now();
@@ -233,12 +282,12 @@ async function runQuery() {
       },
       LONG_TIMEOUT
     );
-    queryResult = payload.data;
+    queryResult = normalizeQueryResult(payload.data);
     queryPage = 1;
     querySort = { column: null, asc: true };
     renderQueryTable();
     const durationMs = Math.round(performance.now() - started);
-    setStatus(`查询完成 · ${durationMs}ms`, "ok");
+    setStatus(`查询完成 · ${queryResult.rowCount} 行 · ${durationMs}ms`, "ok");
     showToast(`返回 ${queryResult.rowCount} 行`);
     appState.sqlHistory = await pushSqlHistory({
       sql,
@@ -256,8 +305,10 @@ async function runQuery() {
 
 async function runExecute() {
   const conn = getActiveConnection();
-  const sql = els.executeEditor.value.trim();
-  if (!conn || !sql) return showToast("请填写连接与 SQL", false);
+  if (!conn) return showToast("请先在设置页添加 MySQL 连接", false);
+
+  const sql = getEditorSql("executeEditor");
+  if (!sql) return showToast("请先输入要执行的 SQL", false);
 
   const dangerous = isDangerousSql(sql);
   const allowDangerous = els.allowDangerous.checked;
@@ -287,12 +338,12 @@ async function runExecute() {
       },
       LONG_TIMEOUT
     );
-    const result = payload.data;
+    const result = normalizeExecuteResult(payload.data);
     const durationMs = Math.round(performance.now() - started);
     els.executeResult.innerHTML = `
       <div class="wb-result-meta">
-        <span class="wb-chip">影响行数 ${result.rows_affected}</span>
-        <span class="wb-chip">last_insert_id ${result.last_insert_id}</span>
+        <span class="wb-chip">影响行数 ${result.rowsAffected}</span>
+        <span class="wb-chip">last_insert_id ${result.lastInsertId}</span>
         <span class="wb-chip">${durationMs} ms</span>
       </div>
     `;
@@ -303,7 +354,7 @@ async function runExecute() {
       connectionName: conn.name,
       type: "execute",
       durationMs,
-      rowCount: result.rows_affected,
+      rowCount: result.rowsAffected,
     });
     renderHistory();
   } catch (err) {
@@ -328,7 +379,8 @@ async function loadTables() {
       return;
     }
     const snippet = `SELECT * FROM \`${tables[0]}\` LIMIT 20`;
-    els.queryEditor.value = snippet;
+    const editor = getEditor("queryEditor");
+    if (editor) editor.value = snippet;
     showToast(`已加载 ${tables.length} 张表`);
     setStatus("表列表已加载", "ok");
   } catch (err) {
@@ -427,6 +479,42 @@ async function pollImportStatus() {
   }
 }
 
+async function flushDatabase() {
+  const conn = getActiveConnection();
+  if (!conn) return showToast("请选择连接", false);
+  if (!conn.database) return showToast("连接未指定 database，无法清库", false);
+
+  const confirmText = flushDbConfirmText(conn);
+  const ok = window.confirm(
+    `危险操作：将删除【${conn.name}】库中的全部表。\n\n${confirmText}\n\n确认清空？`
+  );
+  if (!ok) return showToast("已取消", false);
+
+  setStatus("清库中...", "busy");
+  try {
+    const payload = await apiFetch(
+      appState,
+      "/api/mysql/flush-db",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          target: connectionToTarget(conn),
+          confirm_text: confirmText,
+        }),
+      },
+      LONG_TIMEOUT
+    );
+    const result = payload.data || {};
+    const tablesDropped = result.tables_dropped ?? result.tablesDropped ?? 0;
+    const database = result.database || conn.database || "";
+    setStatus(`清库完成 · 删除 ${tablesDropped} 张表`, "ok");
+    showToast(`已清空 ${database}，删除 ${tablesDropped} 张表`);
+  } catch (err) {
+    setStatus(err.message, "error");
+    showToast(err.message, false);
+  }
+}
+
 async function startImport() {
   const conn = getActiveConnection();
   const filePath = els.importPath.value.trim();
@@ -491,6 +579,7 @@ function bindEvents() {
     appState.mysqlActiveConnectionId = els.connectionSelect.value;
     await chrome.storage.local.set({ mysqlActiveConnectionId: appState.mysqlActiveConnectionId });
     renderConnections();
+    seedQueryEditor();
   });
 
   els.historyFavoriteOnly.addEventListener("change", renderHistory);
@@ -511,6 +600,7 @@ function bindEvents() {
   });
   $("startImportBtn").addEventListener("click", startImport);
   $("cancelImportBtn").addEventListener("click", cancelImport);
+  $("flushDbBtn")?.addEventListener("click", flushDatabase);
 
   document.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
@@ -527,6 +617,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindEvents();
   renderConnections();
   renderHistory();
+  seedQueryEditor();
   setStatus("就绪");
 });
 })();

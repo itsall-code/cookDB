@@ -30,6 +30,12 @@ pub struct MySqlExecuteResult {
     pub last_insert_id: u64,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MySqlFlushDbResult {
+    pub database: String,
+    pub tables_dropped: usize,
+}
+
 pub async fn create_pool(
     cfg: &MySqlConfig,
     max_connections: Option<u32>,
@@ -190,6 +196,73 @@ pub async fn execute_statement(
         rows_affected: result.rows_affected(),
         last_insert_id: result.last_insert_id(),
     })
+}
+
+pub async fn flush_database(cfg: &MySqlConfig) -> anyhow::Result<MySqlFlushDbResult> {
+    let database = cfg
+        .database
+        .as_deref()
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("mysql database must be specified for flush"))?
+        .to_string();
+
+    warn!(
+        target = %mysql_target(cfg),
+        database = %database,
+        "mysql flush database"
+    );
+
+    let tables = list_tables(cfg).await?;
+    if tables.is_empty() {
+        info!(
+            target = %mysql_target(cfg),
+            database = %database,
+            "mysql flush database skipped (no tables)"
+        );
+        return Ok(MySqlFlushDbResult {
+            database,
+            tables_dropped: 0,
+        });
+    }
+
+    let mut conn = connect_direct(cfg).await?;
+    conn.execute("SET FOREIGN_KEY_CHECKS = 0")
+        .await
+        .context("failed to disable foreign key checks")?;
+
+    for chunk in tables.chunks(50) {
+        let drop_sql = format!(
+            "DROP TABLE IF EXISTS {}",
+            chunk
+                .iter()
+                .map(|table| format!("`{}`", escape_mysql_identifier(table)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        conn.execute(drop_sql.as_str())
+            .await
+            .with_context(|| format!("failed to drop tables: {}", drop_sql))?;
+    }
+
+    conn.execute("SET FOREIGN_KEY_CHECKS = 1")
+        .await
+        .context("failed to re-enable foreign key checks")?;
+
+    info!(
+        target = %mysql_target(cfg),
+        database = %database,
+        tables_dropped = tables.len(),
+        "mysql flush database ok"
+    );
+
+    Ok(MySqlFlushDbResult {
+        database,
+        tables_dropped: tables.len(),
+    })
+}
+
+fn escape_mysql_identifier(name: &str) -> String {
+    name.replace('`', "``")
 }
 
 fn validate_select_sql(sql: &str) -> anyhow::Result<()> {

@@ -102,6 +102,11 @@ function importConfirmText(conn, filePath) {
   return `IMPORT mysql ${conn.host} db=${db} file=${fileName}`;
 }
 
+function flushDbConfirmText(conn) {
+  const db = conn.database || "";
+  return `FLUSH mysql ${conn.host} db=${db}`;
+}
+
 function isDangerousSql(sql) {
   const trimmed = sql.trim().toLowerCase();
   return ["delete", "truncate", "drop"].some((p) => trimmed.startsWith(p));

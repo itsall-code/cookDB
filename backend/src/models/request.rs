@@ -200,3 +200,28 @@ pub struct MySqlImportJobRequest {
 pub struct MySqlTableListRequest {
     pub target: MySqlConfig,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MySqlFlushDbRequest {
+    pub target: MySqlConfig,
+    pub confirm_text: String,
+}
+
+impl MySqlFlushDbRequest {
+    pub fn validate_confirm(&self) -> Result<(), AppError> {
+        let database = self.target.database.as_deref().unwrap_or("");
+        if database.is_empty() {
+            return Err(AppError::BadRequest(
+                "mysql database must be specified for flush".to_string(),
+            ));
+        }
+        let expected = format!("FLUSH mysql {} db={}", self.target.host, database);
+        if self.confirm_text != expected {
+            return Err(AppError::BadRequest(format!(
+                "invalid confirm_text, expected: {}",
+                expected
+            )));
+        }
+        Ok(())
+    }
+}
