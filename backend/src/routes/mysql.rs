@@ -9,8 +9,8 @@ use crate::{
     models::{
         mysql::MySqlConfig,
         request::{
-            MySqlExecuteRequest, MySqlFlushDbRequest, MySqlImportFileRequest, MySqlImportJobRequest,
-            MySqlQueryRequest, MySqlTableListRequest,
+            MySqlColumnsRequest, MySqlExecuteRequest, MySqlFlushDbRequest, MySqlImportFileRequest,
+            MySqlImportJobRequest, MySqlLookupRequest, MySqlQueryRequest, MySqlTableListRequest,
         },
         response::ApiResponse,
     },
@@ -23,9 +23,12 @@ pub fn routes() -> Router {
         .route("/api/mysql/ping", get(ping))
         .route("/api/mysql/test", post(test_connection))
         .route("/api/mysql/tables", post(list_tables))
+        .route("/api/mysql/columns", post(list_columns))
+        .route("/api/mysql/lookup", post(lookup_column))
         .route("/api/mysql/query", post(query_rows))
         .route("/api/mysql/execute", post(execute_statement))
         .route("/api/mysql/flush-db", post(flush_database))
+        .route("/api/mysql/sql-files", get(list_sql_files))
         .route("/api/mysql/import-file", post(start_import_file))
         .route("/api/mysql/import-file/status", post(import_file_status))
         .route("/api/mysql/import-file/cancel", post(cancel_import_file))
@@ -59,6 +62,45 @@ async fn list_tables(
     Ok(Json(ApiResponse::ok_with_message(
         tables,
         "Loaded mysql tables".to_string(),
+    )))
+}
+
+async fn list_columns(
+    Json(req): Json<MySqlColumnsRequest>,
+) -> Result<Json<ApiResponse<Vec<String>>>, AppError> {
+    info!(
+        target = %mysql_target(&req.target),
+        table = %req.table,
+        "api mysql columns"
+    );
+    let columns = mysql_service::list_columns(&req.target, &req.table).await?;
+    Ok(Json(ApiResponse::ok_with_message(
+        columns,
+        "Loaded mysql columns".to_string(),
+    )))
+}
+
+async fn lookup_column(
+    Json(req): Json<MySqlLookupRequest>,
+) -> Result<Json<ApiResponse<mysql_service::MySqlLookupResult>>, AppError> {
+    info!(
+        target = %mysql_target(&req.target),
+        table = %req.table,
+        key_column = %req.key_column,
+        value_column = %req.value_column,
+        "api mysql lookup"
+    );
+    let result = mysql_service::lookup_column_value(
+        &req.target,
+        &req.table,
+        &req.key_column,
+        &req.key_value,
+        &req.value_column,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok_with_message(
+        result,
+        "MySQL lookup complete".to_string(),
     )))
 }
 
@@ -103,6 +145,14 @@ async fn flush_database(
     Ok(Json(ApiResponse::ok_with_message(
         result,
         "MySQL database flushed".to_string(),
+    )))
+}
+
+async fn list_sql_files() -> Result<Json<ApiResponse<Vec<mysql_import::SqlFileEntry>>>, AppError> {
+    let files = mysql_import::list_sql_files().await?;
+    Ok(Json(ApiResponse::ok_with_message(
+        files,
+        "Listed SQL files in data directory".to_string(),
     )))
 }
 

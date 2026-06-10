@@ -15,6 +15,7 @@ const els = {
   queryTableWrap: $("queryTableWrap"),
   queryPageInfo: $("queryPageInfo"),
   executeResult: $("executeResult"),
+  importPathSelect: $("importPathSelect"),
   importPath: $("importPath"),
   importConfirmHint: $("importConfirmHint"),
   importProgressBar: $("importProgressBar"),
@@ -36,6 +37,14 @@ let queryPage = 1;
 const PAGE_SIZE = 50;
 let importJobId = null;
 let importPollTimer = null;
+let lookupTables = [];
+let sqlFileList = [];
+
+function getImportPath() {
+  const custom = els.importPath?.value.trim();
+  if (custom) return custom;
+  return els.importPathSelect?.value.trim() || "";
+}
 
 function showToast(message, ok = true) {
   els.toast.textContent = message;
@@ -123,8 +132,54 @@ function renderConnections() {
     <div>用户：${escapeHtml(conn.username)}</div>
   `;
 
-  const filePath = els.importPath.value.trim() || "data/test_data.sql";
-  els.importConfirmHint.textContent = `确认码：${importConfirmText(conn, filePath)}`;
+  const filePath = getImportPath();
+  els.importConfirmHint.textContent = filePath
+    ? `确认码：${importConfirmText(conn, filePath)}`
+    : "请选择或填写 SQL 文件路径";
+}
+
+function renderImportPathSelect() {
+  const select = els.importPathSelect;
+  if (!select) return;
+
+  const prev = getImportPath();
+  select.innerHTML = "";
+
+  if (!sqlFileList.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "未找到 data 目录下的 SQL 文件";
+    select.appendChild(opt);
+    return;
+  }
+
+  sqlFileList.forEach((file) => {
+    const opt = document.createElement("option");
+    opt.value = file.path;
+    const size = file.size ?? file.size_bytes ?? 0;
+    opt.textContent = `${file.name} (${formatBytes(size)}) · ${file.path}`;
+    if (file.path === prev) opt.selected = true;
+    select.appendChild(opt);
+  });
+
+  if (!select.value && sqlFileList[0]) {
+    select.value = sqlFileList[0].path;
+  }
+}
+
+async function loadSqlFiles() {
+  if (!els.importPathSelect) return;
+
+  try {
+    const payload = await apiFetch(appState, "/api/mysql/sql-files", { method: "GET" });
+    sqlFileList = payload.data || [];
+    renderImportPathSelect();
+    renderConnections();
+  } catch (err) {
+    sqlFileList = [];
+    renderImportPathSelect();
+    showToast(`加载 SQL 列表失败：${err.message}`, false);
+  }
 }
 
 function renderHistory() {
@@ -174,6 +229,108 @@ function switchTab(tab) {
   });
   document.querySelectorAll(".wb-tab-panel").forEach((panel) => {
     panel.classList.toggle("active", panel.id === `tab-${tab}`);
+  });
+  if (tab === "lookup" && !lookupTables.length) {
+    refreshLookupTables().catch(() => {});
+  }
+}
+
+function fillSelect(select, options, placeholder) {
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = "";
+  const blank = document.createElement("option");
+  blank.value = "";
+  blank.textContent = placeholder;
+  select.appendChild(blank);
+  options.forEach((item) => {
+    const opt = document.createElement("option");
+    opt.value = item;
+    opt.textContent = item;
+    select.appendChild(opt);
+  });
+  if (current && options.includes(current)) select.value = current;
+}
+
+function clearLookupKeyValue() {
+  const keyInput = $("lookupKeyValue");
+  if (keyInput) keyInput.value = "";
+}
+
+function getLookupPrefs() {
+  return {
+    table: $("lookupTable")?.value || "",
+    keyColumn: $("lookupKeyColumn")?.value || "",
+    valueColumn: $("lookupValueColumn")?.value || "",
+  };
+}
+
+async function persistLookupCache() {
+  const conn = getActiveConnection();
+  if (!conn) return;
+  const prefs = getLookupPrefs();
+  if (!prefs.table) return;
+  await saveMysqlLookupCache(conn.id, prefs);
+}
+
+async function applyLookupCache() {
+  const conn = getActiveConnection();
+  if (!conn) return;
+
+  const cached = await loadMysqlLookupCache(conn.id);
+  clearLookupKeyValue();
+
+  const tableSelect = $("lookupTable");
+  if (!cached?.table || !tableSelect || !lookupTables.includes(cached.table)) return;
+
+  tableSelect.value = cached.table;
+  await loadLookupColumns(cached.table, cached);
+  clearLookupKeyValue();
+}
+
+function resetLookupForm() {
+  lookupTables = [];
+  fillSelect($("lookupTable"), [], "请选择表");
+  fillSelect($("lookupKeyColumn"), [], "请选择列");
+  fillSelect($("lookupValueColumn"), [], "请选择列");
+  clearLookupKeyValue();
+  const result = $("lookupResult");
+  if (result) {
+    result.className = "wb-lookup-result wb-empty";
+    result.textContent = "查询结果将显示在这里";
+  }
+}
+
+function renderLookupResult(data) {
+  const el = $("lookupResult");
+  if (!el) return;
+  const values = data?.values ?? [];
+  const rowCount = data?.rowCount ?? data?.row_count ?? values.length;
+  if (!rowCount) {
+    el.className = "wb-lookup-result wb-empty";
+    el.textContent = "未找到匹配记录";
+    return;
+  }
+  const limited = data?.limited;
+  const items = values
+    .map((value) => {
+      const text = value == null ? "NULL" : typeof value === "object" ? JSON.stringify(value) : String(value);
+      return `<div class="wb-lookup-value copyable" data-copy="${escapeHtml(text)}" title="点击复制">${escapeHtml(text)}</div>`;
+    })
+    .join("");
+  el.className = "wb-lookup-result";
+  el.innerHTML = `
+    <div class="wb-result-meta">
+      <span class="wb-chip">${rowCount} 条</span>
+      ${limited ? '<span class="wb-chip warn">仅展示前 100 条</span>' : ""}
+    </div>
+    ${items}
+  `;
+  el.querySelectorAll(".wb-lookup-value").forEach((node) => {
+    node.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(node.dataset.copy || node.textContent);
+      showToast("已复制");
+    });
   });
 }
 
@@ -389,6 +546,121 @@ async function loadTables() {
   }
 }
 
+async function refreshLookupTables() {
+  const conn = getActiveConnection();
+  if (!conn) return showToast("请先在设置页添加 MySQL 连接", false);
+
+  setStatus("加载表列表...", "busy");
+  try {
+    const payload = await apiFetch(appState, "/api/mysql/tables", {
+      method: "POST",
+      body: JSON.stringify({ target: connectionToTarget(conn) }),
+    });
+    lookupTables = payload.data || [];
+    fillSelect($("lookupTable"), lookupTables, "请选择表");
+    fillSelect($("lookupKeyColumn"), [], "请选择列");
+    fillSelect($("lookupValueColumn"), [], "请选择列");
+    renderLookupResult({ values: [], row_count: 0 });
+    if (!lookupTables.length) {
+      showToast("当前库没有表", false);
+      setStatus("无可用表", "error");
+      return;
+    }
+    await applyLookupCache();
+    setStatus(`已加载 ${lookupTables.length} 张表`, "ok");
+    showToast(`已加载 ${lookupTables.length} 张表`);
+  } catch (err) {
+    setStatus(err.message, "error");
+    showToast(err.message, false);
+  }
+}
+
+async function loadLookupColumns(table, preferred = null) {
+  const conn = getActiveConnection();
+  if (!conn || !table) {
+    fillSelect($("lookupKeyColumn"), [], "请选择列");
+    fillSelect($("lookupValueColumn"), [], "请选择列");
+    return;
+  }
+  try {
+    const payload = await apiFetch(appState, "/api/mysql/columns", {
+      method: "POST",
+      body: JSON.stringify({ target: connectionToTarget(conn), table }),
+    });
+    const columns = payload.data || [];
+    fillSelect($("lookupKeyColumn"), columns, "请选择列");
+    fillSelect($("lookupValueColumn"), columns, "请选择列");
+
+    const keySelect = $("lookupKeyColumn");
+    const valueSelect = $("lookupValueColumn");
+    if (preferred?.keyColumn && columns.includes(preferred.keyColumn)) {
+      keySelect.value = preferred.keyColumn;
+    } else if (columns.length >= 2) {
+      keySelect.value = columns[0];
+    } else if (columns.length === 1) {
+      keySelect.value = columns[0];
+    }
+
+    if (preferred?.valueColumn && columns.includes(preferred.valueColumn)) {
+      valueSelect.value = preferred.valueColumn;
+    } else if (columns.length >= 2) {
+      valueSelect.value = columns[1];
+    } else if (columns.length === 1) {
+      valueSelect.value = columns[0];
+    }
+
+    clearLookupKeyValue();
+    $("lookupKeyValue")?.focus();
+  } catch (err) {
+    showToast(err.message, false);
+  }
+}
+
+async function runLookup() {
+  const conn = getActiveConnection();
+  if (!conn) return showToast("请先在设置页添加 MySQL 连接", false);
+
+  const table = $("lookupTable")?.value;
+  const keyColumn = $("lookupKeyColumn")?.value;
+  const keyValue = $("lookupKeyValue")?.value.trim();
+  const valueColumn = $("lookupValueColumn")?.value;
+
+  if (!table) return showToast("请选择数据表", false);
+  if (!keyColumn) return showToast("请选择条件列", false);
+  if (!keyValue) return showToast("请填写条件值", false);
+  if (!valueColumn) return showToast("请选择返回列", false);
+
+  setStatus("单表查询中...", "busy");
+  const started = performance.now();
+  try {
+    const payload = await apiFetch(
+      appState,
+      "/api/mysql/lookup",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          target: connectionToTarget(conn),
+          table,
+          key_column: keyColumn,
+          key_value: keyValue,
+          value_column: valueColumn,
+        }),
+      },
+      LONG_TIMEOUT
+    );
+    const result = payload.data || {};
+    renderLookupResult(result);
+    const rowCount = result.rowCount ?? result.row_count ?? result.values?.length ?? 0;
+    const durationMs = Math.round(performance.now() - started);
+    setStatus(`查询完成 · ${rowCount} 条 · ${durationMs}ms`, rowCount ? "ok" : "idle");
+    showToast(rowCount ? `找到 ${rowCount} 条` : "未找到匹配记录", Boolean(rowCount));
+    await persistLookupCache();
+  } catch (err) {
+    setStatus(err.message, "error");
+    showToast(err.message, false);
+  }
+}
+
 function exportCsv() {
   const rows = sortedRows();
   if (!rows.length) return showToast("没有可导出的数据", false);
@@ -517,8 +789,8 @@ async function flushDatabase() {
 
 async function startImport() {
   const conn = getActiveConnection();
-  const filePath = els.importPath.value.trim();
-  if (!conn || !filePath) return showToast("请填写连接与文件路径", false);
+  const filePath = getImportPath();
+  if (!conn || !filePath) return showToast("请选择或填写 SQL 文件路径", false);
 
   const confirmText = importConfirmText(conn, filePath);
   const ok = window.confirm(`导入将执行 DROP/CREATE/INSERT 等语句，覆盖目标库。\n\n连接：${conn.name}\n文件：${filePath}\n\n确认导入？`);
@@ -580,14 +852,31 @@ function bindEvents() {
     await chrome.storage.local.set({ mysqlActiveConnectionId: appState.mysqlActiveConnectionId });
     renderConnections();
     seedQueryEditor();
+    resetLookupForm();
+    if (activeTab === "lookup") {
+      await refreshLookupTables();
+    }
   });
 
   els.historyFavoriteOnly.addEventListener("change", renderHistory);
-  els.importPath.addEventListener("input", renderConnections);
+  els.importPathSelect?.addEventListener("change", renderConnections);
+  els.importPath?.addEventListener("input", renderConnections);
+  $("refreshSqlFilesBtn")?.addEventListener("click", loadSqlFiles);
 
   $("runQueryBtn").addEventListener("click", runQuery);
   $("runExecuteBtn").addEventListener("click", runExecute);
   $("loadTablesBtn").addEventListener("click", loadTables);
+  $("refreshLookupBtn")?.addEventListener("click", refreshLookupTables);
+  $("runLookupBtn")?.addEventListener("click", runLookup);
+  $("lookupTable")?.addEventListener("change", async (event) => {
+    await loadLookupColumns(event.target.value);
+    await persistLookupCache();
+  });
+  $("lookupKeyColumn")?.addEventListener("change", () => persistLookupCache());
+  $("lookupValueColumn")?.addEventListener("change", () => persistLookupCache());
+  $("lookupKeyValue")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") runLookup();
+  });
   $("exportCsvBtn").addEventListener("click", exportCsv);
   $("queryPrevBtn").addEventListener("click", () => {
     queryPage = Math.max(1, queryPage - 1);
@@ -607,6 +896,7 @@ function bindEvents() {
       const mysqlPanel = $("tab-app-mysql");
       if (mysqlPanel && !mysqlPanel.classList.contains("active")) return;
       if (activeTab === "query") runQuery();
+      if (activeTab === "lookup") runLookup();
       if (activeTab === "execute") runExecute();
     }
   });
@@ -618,6 +908,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   renderConnections();
   renderHistory();
   seedQueryEditor();
+  await loadSqlFiles();
   setStatus("就绪");
 });
 })();

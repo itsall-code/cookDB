@@ -404,6 +404,16 @@ curl -X POST http://127.0.0.1:8642/api/mysql/execute \
 
 大体积 dump（如 `data/test_data.sql`）由后端本地路径流式读取，1MB 分块解析 + 200 条/批事务提交，避免经浏览器上传。
 
+#### `GET /api/mysql/sql-files`
+
+扫描后端 `data/` 目录（含子目录）下全部 `.sql` 文件，供扩展导入页下拉选择。
+
+```bash
+curl http://127.0.0.1:8642/api/mysql/sql-files
+```
+
+响应 `data` 为数组，每项含 `path`（如 `data/test_data.sql`）、`name`、`size`（字节）。
+
 #### `POST /api/mysql/import-file`
 
 确认码：`IMPORT mysql <host> db=<database> file=<文件名>`

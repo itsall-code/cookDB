@@ -533,7 +533,19 @@ button.danger:hover {
   gap: 10px;
 }
 
-.wb-import-path input {
+.wb-import-path-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.wb-import-path-row select {
+  width: 100%;
+}
+
+.wb-import-path input,
+.wb-import-path-row select {
   width: 100%;
   border: 1px solid var(--wb-border);
   border-radius: 12px;
@@ -674,6 +686,61 @@ button.danger:hover {
 .wb-table th:focus-visible,
 .wb-table td.copyable:focus-visible {
   outline-offset: -2px;
+}
+
+.lookup-hint {
+  margin-bottom: 12px;
+  color: #64748b;
+}
+
+.lookup-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.lookup-field label {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+
+.lookup-field input {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.wb-lookup-result {
+  margin-top: 14px;
+  min-height: 88px;
+  max-height: 280px;
+  overflow: auto;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(248, 250, 252, 0.8);
+}
+
+.wb-lookup-value {
+  padding: 10px 12px;
+  margin-top: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: #fff;
+  font-family: var(--wb-mono);
+  font-size: 13px;
+  cursor: pointer;
+  word-break: break-all;
+  transition: border-color 0.16s var(--wb-ease), background 0.16s var(--wb-ease);
+}
+
+.wb-lookup-value:hover {
+  border-color: rgba(129, 140, 248, 0.55);
+  background: rgba(79, 70, 229, 0.04);
 }
 
 @media (prefers-reduced-motion: reduce) {

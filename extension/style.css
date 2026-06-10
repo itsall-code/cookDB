@@ -827,6 +827,57 @@ button:focus-visible {
   box-shadow: none;
 }
 
+#tab-app-mysql .lookup-hint {
+  margin-bottom: var(--s-3);
+  color: var(--text-muted);
+}
+
+#tab-app-mysql .lookup-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-3);
+}
+
+#tab-app-mysql .lookup-field label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+#tab-app-mysql .lookup-field select,
+#tab-app-mysql .lookup-field input {
+  width: 100%;
+}
+
+#tab-app-mysql .wb-lookup-result {
+  margin-top: var(--s-3);
+  min-height: 72px;
+  max-height: 200px;
+  overflow: auto;
+  padding: var(--s-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.02);
+}
+
+#tab-app-mysql .wb-lookup-value {
+  padding: 8px 10px;
+  margin-top: 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  cursor: pointer;
+  word-break: break-all;
+}
+
+#tab-app-mysql .wb-lookup-value:hover {
+  border-color: var(--primary);
+  background: rgba(79, 70, 229, 0.04);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

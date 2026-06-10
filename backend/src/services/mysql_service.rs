@@ -36,6 +36,13 @@ pub struct MySqlFlushDbResult {
     pub tables_dropped: usize,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MySqlLookupResult {
+    pub values: Vec<Value>,
+    pub row_count: usize,
+    pub limited: bool,
+}
+
 pub async fn create_pool(
     cfg: &MySqlConfig,
     max_connections: Option<u32>,
@@ -106,6 +113,103 @@ pub async fn list_tables(cfg: &MySqlConfig) -> anyhow::Result<Vec<String>> {
     let tables: Vec<String> = sqlx::query_scalar("SHOW TABLES").fetch_all(&pool).await?;
     info!(target = %mysql_target(cfg), table_count = tables.len(), "mysql list tables ok");
     Ok(tables)
+}
+
+pub async fn list_columns(cfg: &MySqlConfig, table: &str) -> anyhow::Result<Vec<String>> {
+    validate_mysql_identifier(table)?;
+    info!(target = %mysql_target(cfg), table, "mysql list columns");
+    let pool = create_pool(cfg, None).await?;
+    let columns: Vec<String> = sqlx::query_scalar(
+        "SELECT COLUMN_NAME FROM information_schema.COLUMNS \
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? \
+         ORDER BY ORDINAL_POSITION",
+    )
+    .bind(table)
+    .fetch_all(&pool)
+    .await?;
+    info!(
+        target = %mysql_target(cfg),
+        table,
+        column_count = columns.len(),
+        "mysql list columns ok"
+    );
+    Ok(columns)
+}
+
+const LOOKUP_LIMIT: u32 = 100;
+
+pub async fn lookup_column_value(
+    cfg: &MySqlConfig,
+    table: &str,
+    key_column: &str,
+    key_value: &str,
+    value_column: &str,
+) -> anyhow::Result<MySqlLookupResult> {
+    validate_mysql_identifier(table)?;
+    validate_mysql_identifier(key_column)?;
+    validate_mysql_identifier(value_column)?;
+
+    if key_value.trim().is_empty() {
+        bail!("key_value cannot be empty");
+    }
+
+    let sql = format!(
+        "SELECT `{}` AS lookup_value FROM `{}` WHERE `{}` = ? LIMIT {}",
+        escape_mysql_identifier(value_column),
+        escape_mysql_identifier(table),
+        escape_mysql_identifier(key_column),
+        LOOKUP_LIMIT + 1
+    );
+
+    info!(
+        target = %mysql_target(cfg),
+        table,
+        key_column,
+        value_column,
+        "mysql lookup"
+    );
+
+    let pool = create_pool(cfg, None).await?;
+    let rows = sqlx::query(&sql).bind(key_value).fetch_all(&pool).await?;
+    let limited = rows.len() > LOOKUP_LIMIT as usize;
+    let rows = rows.into_iter().take(LOOKUP_LIMIT as usize).collect::<Vec<_>>();
+
+    let mut values = Vec::with_capacity(rows.len());
+    for row in &rows {
+        values.push(mysql_value_to_json(row, 0)?);
+    }
+
+    info!(
+        target = %mysql_target(cfg),
+        table,
+        row_count = values.len(),
+        limited,
+        "mysql lookup ok"
+    );
+
+    Ok(MySqlLookupResult {
+        row_count: values.len(),
+        limited,
+        values,
+    })
+}
+
+fn validate_mysql_identifier(name: &str) -> anyhow::Result<()> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        bail!("identifier cannot be empty");
+    }
+    if !trimmed
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    {
+        bail!("invalid identifier: {}", trimmed);
+    }
+    Ok(())
+}
+
+fn escape_mysql_identifier(name: &str) -> String {
+    name.replace('`', "``")
 }
 
 pub async fn query_rows(
@@ -259,10 +363,6 @@ pub async fn flush_database(cfg: &MySqlConfig) -> anyhow::Result<MySqlFlushDbRes
         database,
         tables_dropped: tables.len(),
     })
-}
-
-fn escape_mysql_identifier(name: &str) -> String {
-    name.replace('`', "``")
 }
 
 fn validate_select_sql(sql: &str) -> anyhow::Result<()> {

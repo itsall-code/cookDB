@@ -182,6 +182,32 @@ function escapeHtml(value) {
 }
 
 const APP_TAB_ORDER_KEY = "appTabOrder";
+const MYSQL_LOOKUP_CACHE_KEY = "mysqlLookupCache";
+
+async function loadMysqlLookupCache(connectionId) {
+  if (!connectionId) return null;
+  const data = await chrome.storage.local.get([MYSQL_LOOKUP_CACHE_KEY]);
+  const cache = data[MYSQL_LOOKUP_CACHE_KEY] || {};
+  const entry = cache[connectionId];
+  if (!entry?.table) return null;
+  return {
+    table: entry.table,
+    keyColumn: entry.keyColumn || entry.key_column || "",
+    valueColumn: entry.valueColumn || entry.value_column || "",
+  };
+}
+
+async function saveMysqlLookupCache(connectionId, prefs) {
+  if (!connectionId || !prefs?.table) return;
+  const data = await chrome.storage.local.get([MYSQL_LOOKUP_CACHE_KEY]);
+  const cache = data[MYSQL_LOOKUP_CACHE_KEY] || {};
+  cache[connectionId] = {
+    table: prefs.table,
+    keyColumn: prefs.keyColumn || "",
+    valueColumn: prefs.valueColumn || "",
+  };
+  await chrome.storage.local.set({ [MYSQL_LOOKUP_CACHE_KEY]: cache });
+}
 
 async function loadAppTabOrder() {
   const data = await chrome.storage.local.get([APP_TAB_ORDER_KEY]);

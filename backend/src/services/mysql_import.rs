@@ -37,6 +37,13 @@ const CANCEL_CHECK_INTERVAL: u64 = 16;
 const PROGRESS_SYNC_BYTES: u64 = 8 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize)]
+pub struct SqlFileEntry {
+    pub path: String,
+    pub name: String,
+    pub size: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct MySqlImportProgress {
     pub job_id: String,
     pub status: ImportStatus,
@@ -193,6 +200,90 @@ pub async fn cancel_import(job_id: &str) -> anyhow::Result<MySqlImportProgress> 
         "mysql import cancellation requested"
     );
     Ok(progress)
+}
+
+pub fn resolve_data_dir() -> anyhow::Result<PathBuf> {
+    let cwd = std::env::current_dir().context("failed to resolve current directory")?;
+    let candidates = [
+        cwd.join("data"),
+        cwd.join("..").join("data"),
+        cwd.join("../..").join("data"),
+    ];
+
+    for candidate in &candidates {
+        if candidate.is_dir() {
+            let resolved = candidate
+                .canonicalize()
+                .unwrap_or_else(|_| candidate.clone());
+            debug!(
+                resolved = %resolved.display(),
+                cwd = %cwd.display(),
+                "data directory resolved"
+            );
+            return Ok(resolved);
+        }
+    }
+
+    bail!(
+        "data directory not found. cwd={}. tried: {}",
+        cwd.display(),
+        candidates
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+}
+
+pub async fn list_sql_files() -> anyhow::Result<Vec<SqlFileEntry>> {
+    let data_dir = resolve_data_dir()?;
+    let root = data_dir
+        .parent()
+        .context("data directory has no parent")?
+        .canonicalize()
+        .unwrap_or_else(|_| data_dir.parent().unwrap().to_path_buf());
+
+    let mut entries = Vec::new();
+    collect_sql_files(&data_dir, &root, &mut entries)?;
+    entries.sort_by(|a, b| a.path.cmp(&b.path));
+    info!(
+        data_dir = %data_dir.display(),
+        count = entries.len(),
+        "listed sql files in data directory"
+    );
+    Ok(entries)
+}
+
+fn collect_sql_files(dir: &Path, root: &Path, out: &mut Vec<SqlFileEntry>) -> anyhow::Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let meta = entry.metadata()?;
+        if meta.is_dir() {
+            collect_sql_files(&path, root, out)?;
+            continue;
+        }
+
+        let is_sql = path
+            .extension()
+            .map(|ext| ext.eq_ignore_ascii_case("sql"))
+            .unwrap_or(false);
+        if !is_sql {
+            continue;
+        }
+
+        let rel = path.strip_prefix(root).unwrap_or(&path);
+        let rel_str = rel.to_string_lossy().replace('\\', "/");
+        out.push(SqlFileEntry {
+            path: rel_str,
+            name: path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            size: meta.len(),
+        });
+    }
+    Ok(())
 }
 
 pub fn resolve_sql_file_path(file_path: &str) -> anyhow::Result<PathBuf> {

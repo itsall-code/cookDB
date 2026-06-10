@@ -12,6 +12,8 @@ use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    utils::console::init();
+
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| "cook_db=info,tower_http=info,sqlx=warn".into());
     tracing_subscriber::registry()
@@ -21,7 +23,8 @@ async fn main() -> anyhow::Result<()> {
                 .with_target(true)
                 .with_file(true)
                 .with_line_number(true)
-                .with_thread_ids(false),
+                .with_thread_ids(false)
+                .with_ansi(utils::console::tracing_use_ansi()),
         )
         .init();
 

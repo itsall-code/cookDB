@@ -202,6 +202,21 @@ pub struct MySqlTableListRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MySqlColumnsRequest {
+    pub target: MySqlConfig,
+    pub table: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MySqlLookupRequest {
+    pub target: MySqlConfig,
+    pub table: String,
+    pub key_column: String,
+    pub key_value: String,
+    pub value_column: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MySqlFlushDbRequest {
     pub target: MySqlConfig,
     pub confirm_text: String,

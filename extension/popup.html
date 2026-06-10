@@ -269,6 +269,7 @@
         <div class="section">
           <div class="wb-tabs">
             <button type="button" class="active" data-tab="query">查询</button>
+            <button type="button" data-tab="lookup">单表</button>
             <button type="button" data-tab="execute">执行</button>
             <button type="button" data-tab="import">导入</button>
           </div>
@@ -296,6 +297,33 @@
             </div>
           </div>
 
+          <div id="tab-lookup" class="wb-tab-panel">
+            <div class="small lookup-hint">选择表与列：按「条件列 = 条件值」查询，返回「返回列」的值。</div>
+            <div class="lookup-grid">
+              <div class="lookup-field">
+                <label for="lookupTable">数据表</label>
+                <select id="lookupTable"><option value="">请选择表</option></select>
+              </div>
+              <div class="lookup-field">
+                <label for="lookupKeyColumn">条件列</label>
+                <select id="lookupKeyColumn"><option value="">请选择列</option></select>
+              </div>
+              <div class="lookup-field">
+                <label for="lookupKeyValue">条件值</label>
+                <input id="lookupKeyValue" type="text" placeholder="例如：10001" />
+              </div>
+              <div class="lookup-field">
+                <label for="lookupValueColumn">返回列</label>
+                <select id="lookupValueColumn"><option value="">请选择列</option></select>
+              </div>
+            </div>
+            <div class="wb-actions">
+              <button type="button" class="secondary" id="refreshLookupBtn">刷新表</button>
+              <button type="button" class="primary" id="runLookupBtn">查询</button>
+            </div>
+            <div id="lookupResult" class="wb-lookup-result wb-empty">查询结果将显示在这里</div>
+          </div>
+
           <div id="tab-execute" class="wb-tab-panel">
             <div class="wb-editor-wrap">
               <div class="wb-editor-toolbar">
@@ -315,8 +343,13 @@
 
           <div id="tab-import" class="wb-tab-panel">
             <div class="wb-import-path">
-              <label for="importPath">服务器本地 SQL 文件路径</label>
-              <input id="importPath" type="text" value="data/test_data.sql" placeholder="data/test_data.sql 或绝对路径" />
+              <label for="importPathSelect">data 目录 SQL 脚本</label>
+              <div class="wb-import-path-row">
+                <select id="importPathSelect" class="wb-connection-select"></select>
+                <button type="button" class="secondary" id="refreshSqlFilesBtn">刷新</button>
+              </div>
+              <label for="importPath">自定义路径（留空则使用上方选择）</label>
+              <input id="importPath" type="text" placeholder="绝对路径或其它相对路径" />
               <div class="subtitle">
                 大文件 dump 请勿通过浏览器上传，填写后端可访问的路径，由 Rust 流式读取。
               </div>

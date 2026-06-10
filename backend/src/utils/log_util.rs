@@ -30,6 +30,6 @@ pub fn sql_preview(sql: &str, max: usize) -> String {
     if compact.len() <= max {
         compact
     } else {
-        format!("{}…", &compact[..max])
+        format!("{}...", &compact[..max])
     }
 }

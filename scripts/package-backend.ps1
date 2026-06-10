@@ -82,13 +82,14 @@ if ($IncludeExtension) {
 Write-Host "[3/4] 生成启动脚本与说明..." -ForegroundColor Cyan
 $startBat = @"
 @echo off
+chcp 65001 >nul
 rem 在 exe 所在目录启动，确保能读到 config\app.json
 cd /d "%~dp0"
 set RUST_LOG=cook_db=info,tower_http=info,sqlx=warn
 "%~dp0$exeName"
 pause
 "@
-Set-Content -Path (Join-Path $stageDir "start-backend.bat") -Value $startBat -Encoding ASCII
+Set-Content -Path (Join-Path $stageDir "start-backend.bat") -Value $startBat -Encoding UTF8
 
 $readme = @"
 cook-db 后端 - 离线运行包
