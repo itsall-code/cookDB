@@ -1,3 +1,4 @@
+(() => {
 const $ = (id) => document.getElementById(id);
 
 const els = {
@@ -265,8 +266,9 @@ async function runExecute() {
   }
 
   const confirmText = executeConfirmText(conn, dangerous && allowDangerous);
-  const typed = window.prompt(`请输入确认码：\n${confirmText}`);
-  if (typed !== confirmText) return showToast("确认码不匹配，已取消", false);
+  const danger = dangerous && allowDangerous ? "⚠ 危险语句\n" : "";
+  const ok = window.confirm(`${danger}确认在【${conn.name}】执行以下 SQL？\n\n${sql}`);
+  if (!ok) return showToast("已取消", false);
 
   setStatus("执行中...", "busy");
   const started = performance.now();
@@ -431,9 +433,8 @@ async function startImport() {
   if (!conn || !filePath) return showToast("请填写连接与文件路径", false);
 
   const confirmText = importConfirmText(conn, filePath);
-  const typed = window.prompt(`导入将执行 DROP/CREATE/INSERT 等语句。\n请输入确认码：\n${confirmText}`);
-  if (typed === null) return showToast("已取消导入", false);
-  if (typed !== confirmText) return showToast(`确认码不匹配，应为：${confirmText}`, false);
+  const ok = window.confirm(`导入将执行 DROP/CREATE/INSERT 等语句，覆盖目标库。\n\n连接：${conn.name}\n文件：${filePath}\n\n确认导入？`);
+  if (!ok) return showToast("已取消导入", false);
 
   setStatus("正在启动导入...", "busy");
   $("cancelImportBtn").disabled = false;
@@ -513,6 +514,8 @@ function bindEvents() {
 
   document.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      const mysqlPanel = $("tab-app-mysql");
+      if (mysqlPanel && !mysqlPanel.classList.contains("active")) return;
       if (activeTab === "query") runQuery();
       if (activeTab === "execute") runExecute();
     }
@@ -526,3 +529,4 @@ document.addEventListener("DOMContentLoaded", async () => {
   renderHistory();
   setStatus("就绪");
 });
+})();

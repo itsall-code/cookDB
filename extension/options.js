@@ -291,7 +291,25 @@ async function testMysqlConn() {
   }
 }
 
+function setAppTab(tab) {
+  document.querySelectorAll(".app-tabs button").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.appTab === tab);
+  });
+  document.querySelectorAll(".app-tab-panel").forEach((panel) => {
+    panel.classList.toggle("active", panel.id === `tab-app-${tab}`);
+  });
+}
+
+function bindAppTabs() {
+  document.querySelectorAll(".app-tabs button").forEach((btn) => {
+    btn.addEventListener("click", () => setAppTab(btn.dataset.appTab || "redis"));
+  });
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
+  bindAppTabs();
+  const firstTab = await initTabOrdering(document.querySelector(".app-tabs"));
+  if (firstTab) setAppTab(firstTab);
   await refreshForm();
   byId("saveBtn").addEventListener("click", saveCurrentEnv);
   byId("testHealthBtn").addEventListener("click", testHealth);

@@ -175,3 +175,85 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
 }
+
+const APP_TAB_ORDER_KEY = "appTabOrder";
+
+async function loadAppTabOrder() {
+  const data = await chrome.storage.local.get([APP_TAB_ORDER_KEY]);
+  const order = data[APP_TAB_ORDER_KEY];
+  return Array.isArray(order) ? order : null;
+}
+
+async function saveAppTabOrder(order) {
+  await chrome.storage.local.set({ [APP_TAB_ORDER_KEY]: order });
+}
+
+function readTabOrder(container) {
+  return [...container.querySelectorAll("[data-app-tab]")].map((btn) => btn.dataset.appTab);
+}
+
+// Reorder the tab buttons in the DOM to match a saved order (unknown keys keep their position).
+function applyTabOrder(container, order) {
+  if (!container || !Array.isArray(order)) return;
+  order.forEach((key) => {
+    const btn = container.querySelector(`[data-app-tab="${key}"]`);
+    if (btn) container.appendChild(btn);
+  });
+}
+
+// Enable HTML5 drag-and-drop reordering on a tab bar; persists order and calls onChange(order).
+function enableTabDragSort(container, onChange) {
+  if (!container) return;
+  let dragEl = null;
+
+  container.querySelectorAll("[data-app-tab]").forEach((btn) => {
+    btn.setAttribute("draggable", "true");
+  });
+
+  container.addEventListener("dragstart", (event) => {
+    const btn = event.target.closest("[data-app-tab]");
+    if (!btn) return;
+    dragEl = btn;
+    btn.classList.add("dragging");
+    event.dataTransfer.effectAllowed = "move";
+    try {
+      event.dataTransfer.setData("text/plain", btn.dataset.appTab || "");
+    } catch (_) {
+      /* some browsers require a payload */
+    }
+  });
+
+  container.addEventListener("dragover", (event) => {
+    if (!dragEl) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    const target = event.target.closest("[data-app-tab]");
+    if (!target || target === dragEl) return;
+    const rect = target.getBoundingClientRect();
+    const insertBefore = event.clientX - rect.left < rect.width / 2;
+    container.insertBefore(dragEl, insertBefore ? target : target.nextSibling);
+  });
+
+  container.addEventListener("drop", async (event) => {
+    event.preventDefault();
+    const order = readTabOrder(container);
+    await saveAppTabOrder(order);
+    if (typeof onChange === "function") onChange(order);
+  });
+
+  container.addEventListener("dragend", () => {
+    if (dragEl) dragEl.classList.remove("dragging");
+    dragEl = null;
+  });
+}
+
+// Restore the saved tab order onto a container, then enable drag-to-reorder.
+// Returns the key of the first tab in the restored order (for "open first tab" behavior).
+async function initTabOrdering(container, onChange) {
+  if (!container) return null;
+  const order = await loadAppTabOrder();
+  if (order) applyTabOrder(container, order);
+  enableTabDragSort(container, onChange);
+  const first = container.querySelector("[data-app-tab]");
+  return first ? first.dataset.appTab : null;
+}
