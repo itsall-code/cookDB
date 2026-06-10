@@ -1,3 +1,4 @@
+(() => {
 const DEFAULT_TIMEOUT = 60_000;
 const LONG_TIMEOUT = 300_000;
 
@@ -472,23 +473,6 @@ async function refreshBackendStatus() {
   }
 }
 
-async function loadAppState() {
-  const data = await chrome.storage.local.get(["settings", "activeEnv"]);
-  let settings = data.settings;
-  let activeEnv = data.activeEnv;
-
-  if (!settings || !settings.envs || Object.keys(settings.envs).length === 0) {
-    settings = { envs: { dev: defaultEnv() } };
-    activeEnv = "dev";
-    await chrome.storage.local.set({ settings, activeEnv });
-  } else if (!activeEnv || !settings.envs[activeEnv]) {
-    activeEnv = Object.keys(settings.envs)[0];
-    await chrome.storage.local.set({ settings, activeEnv });
-  }
-
-  appState = { settings, activeEnv };
-}
-
 async function refreshEnvSelect() {
   if (!els.envName) return;
 
@@ -503,7 +487,10 @@ async function refreshEnvSelect() {
 }
 
 async function ensureDefaultState() {
-  await loadAppState();
+  // Use the shared loadAppState (shared.js) so the popup never writes a
+  // settings object that omits mysqlConnections — avoids racing mysql.js and
+  // clobbering the MySQL connection list in chrome.storage.
+  appState = await loadAppState();
 }
 
 function renderEnvSummary() {
@@ -791,8 +778,7 @@ async function flushDb() {
       validateRedisConfig(target, "target Redis");
 
       const confirmText = `FLUSHDB db=${target.db} host=${target.host}`;
-      const text = prompt(`危险操作：请输入以下确认码以清空目标 DB\n${confirmText}`);
-      if (text !== confirmText) {
+      if (!confirm(`危险操作：确认清空目标 DB？\n\n${confirmText}`)) {
         appendLog("已取消清空 DB", "warn");
         return;
       }
@@ -812,7 +798,27 @@ async function flushDb() {
   }, "清空中...");
 }
 
+function setAppTab(tab) {
+  document.querySelectorAll(".app-tabs button").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.appTab === tab);
+  });
+  document.querySelectorAll(".app-tab-panel").forEach((panel) => {
+    panel.classList.toggle("active", panel.id === `tab-app-${tab}`);
+  });
+  const logPanel = $("logPanel");
+  if (logPanel) logPanel.style.display = tab === "redis" ? "" : "none";
+  const scroll = $("popupScroll");
+  if (scroll) scroll.scrollTop = 0;
+}
+
+function bindAppTabs() {
+  document.querySelectorAll(".app-tabs button").forEach((btn) => {
+    btn.addEventListener("click", () => setAppTab(btn.dataset.appTab || "redis"));
+  });
+}
+
 function bindEvents() {
+  bindAppTabs();
   els.envName?.addEventListener("change", switchEnv);
   els.clearLogBtn?.addEventListener("click", clearLog);
   els.testRedisBtn?.addEventListener("click", testRedisConnection);
@@ -829,6 +835,8 @@ function bindEvents() {
 
 document.addEventListener("DOMContentLoaded", async () => {
   bindEvents();
+  const firstTab = await initTabOrdering(document.querySelector(".app-tabs"));
+  if (firstTab) setAppTab(firstTab);
 
   try {
     await ensureDefaultState();
@@ -841,3 +849,4 @@ document.addEventListener("DOMContentLoaded", async () => {
     setBackendStatus(`初始化失败：${error.message}`, false, true);
   }
 });
+})();

@@ -14,8 +14,9 @@
   --wb-warning: #d97706;
   --wb-shadow: 0 24px 60px rgba(15, 23, 42, 0.14);
   --wb-radius: 16px;
-  --wb-font: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --wb-mono: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  --wb-font: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  --wb-mono: "Cascadia Code", "JetBrains Mono", Consolas, "Courier New", monospace;
+  --wb-ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
 * {
@@ -32,6 +33,8 @@ body {
     radial-gradient(circle at top right, rgba(6, 182, 212, 0.12), transparent 24%),
     #eef2ff;
   color: var(--wb-text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 .wb-shell {
@@ -156,10 +159,12 @@ body {
   border-radius: 10px;
   padding: 8px 9px;
   cursor: pointer;
+  transition: border-color 0.16s var(--wb-ease), background 0.16s var(--wb-ease);
 }
 
 .wb-history-item:hover {
   border-color: rgba(129, 140, 248, 0.45);
+  background: rgba(30, 41, 59, 0.7);
 }
 
 .wb-history-item .sql-preview {
@@ -197,6 +202,15 @@ body {
   border-radius: 10px;
   border: 1px solid rgba(148, 163, 184, 0.14);
   background: rgba(255, 255, 255, 0.03);
+  transition: background 0.16s var(--wb-ease), border-color 0.16s var(--wb-ease),
+    color 0.16s var(--wb-ease);
+}
+
+.wb-sidebar-footer a:hover,
+.wb-sidebar-footer button.secondary-link:hover {
+  background: rgba(129, 140, 248, 0.14);
+  border-color: rgba(129, 140, 248, 0.4);
+  color: #fff;
 }
 
 .wb-main {
@@ -296,6 +310,15 @@ body {
   cursor: pointer;
 }
 
+.wb-tabs button {
+  transition: color 0.16s var(--wb-ease), background 0.16s var(--wb-ease);
+}
+
+.wb-tabs button:hover {
+  color: var(--wb-text);
+  background: rgba(79, 70, 229, 0.06);
+}
+
 .wb-tabs button.active {
   color: var(--wb-accent);
   background: #fff;
@@ -368,6 +391,12 @@ body {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+  transition: transform 0.08s var(--wb-ease), filter 0.16s var(--wb-ease),
+    box-shadow 0.16s var(--wb-ease), background 0.16s var(--wb-ease);
+}
+
+.wb-card button:active {
+  transform: translateY(1px);
 }
 
 button.primary {
@@ -375,14 +404,36 @@ button.primary {
   color: #fff;
 }
 
+button.primary:hover {
+  filter: brightness(1.06);
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.3);
+}
+
 button.secondary {
   background: #e2e8f0;
   color: #0f172a;
 }
 
+button.secondary:hover {
+  background: #d8dee9;
+}
+
 button.danger {
   background: linear-gradient(135deg, #dc2626, #b91c1c);
   color: #fff;
+}
+
+button.danger:hover {
+  filter: brightness(1.06);
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.3);
+}
+
+.wb-card button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: none;
+  box-shadow: none;
+  transform: none;
 }
 
 .wb-checkbox {
@@ -602,5 +653,35 @@ button.danger {
 
   .wb-import-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+.wb-connection-select:focus,
+.wb-sidebar select:focus,
+.wb-sidebar input:focus,
+.wb-import-path input:focus,
+.wb-editor:focus {
+  border-color: rgba(129, 140, 248, 0.7);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.28);
+}
+
+:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.wb-table th:focus-visible,
+.wb-table td.copyable:focus-visible {
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
   }
 }

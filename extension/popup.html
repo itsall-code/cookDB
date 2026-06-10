@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CookDB 测试工具</title>
+  <link rel="stylesheet" href="mysql.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body class="popup-body">
@@ -14,12 +15,16 @@
         <h1>Cook-DB 测试工具</h1>
       </div>
       <div class="link-row">
-        <a href="mysql.html" target="_blank" rel="noopener noreferrer">MySQL 工作台</a>
         <a href="options.html" target="_blank" rel="noopener noreferrer">系统设置</a>
       </div>
     </div>
 
-    <div class="log-panel">
+    <div class="app-tabs" role="tablist">
+      <button type="button" class="active" data-app-tab="redis" role="tab">Redis 工具</button>
+      <button type="button" data-app-tab="mysql" role="tab">MySQL 工作台</button>
+    </div>
+
+    <div class="log-panel" id="logPanel">
       <div class="log-panel-header">
         <div>
           <h2>运行日志</h2>
@@ -31,214 +36,350 @@
     </div>
 
     <div class="popup-scroll" id="popupScroll">
-      <div class="section snap-section">
-        <div class="section-heading">
-          <div>
-            <h2>当前环境</h2>
-            <div class="small">切换前请先在系统设置中保存 Redis、MySQL 与后端地址。</div>
+      <!-- ========================= Redis 面板 ========================= -->
+      <div id="tab-app-redis" class="app-tab-panel active">
+        <div class="section snap-section">
+          <div class="section-heading">
+            <div>
+              <h2>当前环境</h2>
+              <div class="small">切换前请先在系统设置中保存 Redis、MySQL 与后端地址。</div>
+            </div>
+            <a class="text-link" href="options.html" target="_blank" rel="noopener noreferrer">编辑配置</a>
           </div>
-          <a class="text-link" href="options.html" target="_blank" rel="noopener noreferrer">编辑配置</a>
-        </div>
-        <div class="row">
-          <div class="col">
-            <label for="envName">环境</label>
-            <select id="envName">
-              <option value="">请选择环境</option>
-            </select>
-          </div>
-        </div>
-        <div id="envSummary" class="env-summary" aria-live="polite"></div>
-      </div>
-
-      <div class="section snap-section">
-        <h2>1. 测试数据库连接</h2>
-        <div class="small">先连通后端 API，再验证所选数据库配置是否可用。</div>
-        <div class="row">
-          <div class="col">
-            <label for="testTarget">测试目标</label>
-            <select id="testTarget">
-              <option value="source">源 Redis</option>
-              <option value="target">目标 Redis</option>
-              <option value="mysql">MySQL</option>
-            </select>
-          </div>
-        </div>
-        <button id="testRedisBtn" type="button">测试连接</button>
-      </div>
-
-      <div class="section snap-section">
-        <h2>2. 备份数据库</h2>
-        <div class="warning-box">源库 → 目标库，会覆盖目标库。执行前会弹出确认。</div>
-        <button id="backupBtn" type="button">执行备份</button>
-      </div>
-
-      <div class="section snap-section">
-        <h2>3. 单账号本地化</h2>
-        <div class="small">根据源账号 Field 生成或指定目标 Field，并写入目标 Redis。</div>
-        <div class="row">
-          <div class="col">
-            <label for="hashName">Hash 名</label>
-            <input id="hashName" type="text" placeholder="例如：Account" />
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col">
-            <label for="sourceField">源账号 Field</label>
-            <input id="sourceField" type="text" placeholder="例如：hxc12_72049" />
-          </div>
-          <div class="col">
-            <label for="targetField">目标账号 Field</label>
-            <input id="targetField" type="text" placeholder="留空自动生成" />
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col">
-            <label for="preLogin">前缀 / pre_login</label>
-            <input id="preLogin" type="text" placeholder="例如：local_" />
-          </div>
-          <div class="col">
-            <label for="server">server</label>
-            <input id="server" type="text" placeholder="例如：S1" />
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col">
-            <label for="platform">platform</label>
-            <input id="platform" type="text" placeholder="例如：1 或 local" />
-          </div>
-          <div class="col">
-            <label for="group">group</label>
-            <input id="group" type="text" placeholder="例如：1" />
-          </div>
-        </div>
-
-        <button id="localizeBtn" type="button">执行本地化</button>
-      </div>
-
-      <div class="section snap-section">
-        <h2>4. 全库 acc 表本地化</h2>
-
-        <div class="row">
-          <div class="col">
-            <label for="batchHashName">Hash 名</label>
-            <input id="batchHashName" type="text" placeholder="例如：Account" />
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col">
-            <label for="batchPreLogin">前缀 / pre_login</label>
-            <input id="batchPreLogin" type="text" placeholder="例如：local_" />
-          </div>
-          <div class="col">
-            <label for="batchServer">server</label>
-            <input id="batchServer" type="text" placeholder="例如：S1" />
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col">
-            <label for="batchPlatform">platform</label>
-            <input id="batchPlatform" type="text" placeholder="例如：1 或 local" />
-          </div>
-          <div class="col">
-            <label for="batchGroup">group</label>
-            <input id="batchGroup" type="text" placeholder="例如：1" />
-          </div>
-        </div>
-
-        <div class="small">自动读取 source Redis 中该 Hash 的全部字段，并写入 target Redis。</div>
-        <button id="batchLocalizeBtn" type="button">执行全表本地化</button>
-      </div>
-
-      <div class="section snap-section">
-        <h2>5. 删除指定 Keys / Tables</h2>
-        <div class="warning-box">仅操作目标 Redis；确认弹窗会展示后端确认码。</div>
-
-        <div class="row">
-          <div class="col">
-            <label for="deleteKeys">Keys（每行一个）</label>
-            <textarea id="deleteKeys" placeholder="key1&#10;key2&#10;key3"></textarea>
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col">
-            <label for="deleteTables">Tables（每行一个）</label>
-            <textarea id="deleteTables" placeholder="table1&#10;table2&#10;table3"></textarea>
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col">
-            <button id="deleteKeysBtn" class="danger" type="button">删除 Keys</button>
-          </div>
-          <div class="col">
-            <button id="deleteTablesBtn" class="danger" type="button">删除 Tables</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="section snap-section collapsible-section" id="viewerSection">
-        <div class="section-topbar">
-          <h2>6. 读取 Hash 字段并可视化</h2>
-          <button id="toggleViewerSectionBtn" class="secondary small-btn" type="button">展开</button>
-        </div>
-
-        <div class="section-summary">
-          按需展开，查看 Hash 字段列表与解码结果。
-        </div>
-
-        <div class="section-body collapsed" id="viewerSectionBody">
           <div class="row">
             <div class="col">
-              <label for="viewRedisTarget">读取来源</label>
-              <select id="viewRedisTarget">
-                <option value="source">source Redis</option>
-                <option value="target">target Redis</option>
+              <label for="envName">环境</label>
+              <select id="envName">
+                <option value="">请选择环境</option>
               </select>
             </div>
           </div>
+          <div id="envSummary" class="env-summary" aria-live="polite"></div>
+        </div>
+
+        <div class="section snap-section">
+          <h2>1. 测试数据库连接</h2>
+          <div class="small">先连通后端 API，再验证所选数据库配置是否可用。</div>
+          <div class="row">
+            <div class="col">
+              <label for="testTarget">测试目标</label>
+              <select id="testTarget">
+                <option value="source">源 Redis</option>
+                <option value="target">目标 Redis</option>
+                <option value="mysql">MySQL</option>
+              </select>
+            </div>
+          </div>
+          <button id="testRedisBtn" type="button">测试连接</button>
+        </div>
+
+        <div class="section snap-section">
+          <h2>2. 备份数据库</h2>
+          <div class="warning-box">源库 → 目标库，会覆盖目标库。执行前会弹出确认。</div>
+          <button id="backupBtn" type="button">执行备份</button>
+        </div>
+
+        <div class="section snap-section">
+          <h2>3. 单账号本地化</h2>
+          <div class="small">根据源账号 Field 生成或指定目标 Field，并写入目标 Redis。</div>
+          <div class="row">
+            <div class="col">
+              <label for="hashName">Hash 名</label>
+              <input id="hashName" type="text" placeholder="例如：Account" />
+            </div>
+          </div>
 
           <div class="row">
             <div class="col">
-              <label for="viewHashName">Hash 名</label>
-              <input id="viewHashName" type="text" placeholder="例如：Account" />
+              <label for="sourceField">源账号 Field</label>
+              <input id="sourceField" type="text" placeholder="例如：hxc12_72049" />
             </div>
-          </div>
-
-          <div class="row field-action-row">
-            <div class="col field-action-btn-col">
-              <button id="listFieldsBtn" class="secondary" type="button">列出字段</button>
-            </div>
-            <div class="col field-action-input-col">
-              <label for="viewField">Field</label>
-              <input id="viewField" type="text" placeholder="选择或输入一个 field" />
+            <div class="col">
+              <label for="targetField">目标账号 Field</label>
+              <input id="targetField" type="text" placeholder="留空自动生成" />
             </div>
           </div>
 
           <div class="row">
             <div class="col">
-              <button id="viewFieldBtn" type="button">读取并可视化</button>
+              <label for="preLogin">前缀 / pre_login</label>
+              <input id="preLogin" type="text" placeholder="例如：local_" />
+            </div>
+            <div class="col">
+              <label for="server">server</label>
+              <input id="server" type="text" placeholder="例如：S1" />
             </div>
           </div>
 
-          <div id="fieldList" class="viewer" style="display:none;"></div>
-          <div id="fieldViewer" class="viewer" style="margin-top:8px;"></div>
+          <div class="row">
+            <div class="col">
+              <label for="platform">platform</label>
+              <input id="platform" type="text" placeholder="例如：1 或 local" />
+            </div>
+            <div class="col">
+              <label for="group">group</label>
+              <input id="group" type="text" placeholder="例如：1" />
+            </div>
+          </div>
+
+          <button id="localizeBtn" type="button">执行本地化</button>
+        </div>
+
+        <div class="section snap-section">
+          <h2>4. 全库 acc 表本地化</h2>
+
+          <div class="row">
+            <div class="col">
+              <label for="batchHashName">Hash 名</label>
+              <input id="batchHashName" type="text" placeholder="例如：Account" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <label for="batchPreLogin">前缀 / pre_login</label>
+              <input id="batchPreLogin" type="text" placeholder="例如：local_" />
+            </div>
+            <div class="col">
+              <label for="batchServer">server</label>
+              <input id="batchServer" type="text" placeholder="例如：S1" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <label for="batchPlatform">platform</label>
+              <input id="batchPlatform" type="text" placeholder="例如：1 或 local" />
+            </div>
+            <div class="col">
+              <label for="batchGroup">group</label>
+              <input id="batchGroup" type="text" placeholder="例如：1" />
+            </div>
+          </div>
+
+          <div class="small">自动读取 source Redis 中该 Hash 的全部字段，并写入 target Redis。</div>
+          <button id="batchLocalizeBtn" type="button">执行全表本地化</button>
+        </div>
+
+        <div class="section snap-section">
+          <h2>5. 删除指定 Keys / Tables</h2>
+          <div class="warning-box">仅操作目标 Redis；确认弹窗会展示后端确认码。</div>
+
+          <div class="row">
+            <div class="col">
+              <label for="deleteKeys">Keys（每行一个）</label>
+              <textarea id="deleteKeys" placeholder="key1&#10;key2&#10;key3"></textarea>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <label for="deleteTables">Tables（每行一个）</label>
+              <textarea id="deleteTables" placeholder="table1&#10;table2&#10;table3"></textarea>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <button id="deleteKeysBtn" class="danger" type="button">删除 Keys</button>
+            </div>
+            <div class="col">
+              <button id="deleteTablesBtn" class="danger" type="button">删除 Tables</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section snap-section collapsible-section" id="viewerSection">
+          <div class="section-topbar">
+            <h2>6. 读取 Hash 字段并可视化</h2>
+            <button id="toggleViewerSectionBtn" class="secondary small-btn" type="button">展开</button>
+          </div>
+
+          <div class="section-summary">
+            按需展开，查看 Hash 字段列表与解码结果。
+          </div>
+
+          <div class="section-body collapsed" id="viewerSectionBody">
+            <div class="row">
+              <div class="col">
+                <label for="viewRedisTarget">读取来源</label>
+                <select id="viewRedisTarget">
+                  <option value="source">source Redis</option>
+                  <option value="target">target Redis</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col">
+                <label for="viewHashName">Hash 名</label>
+                <input id="viewHashName" type="text" placeholder="例如：Account" />
+              </div>
+            </div>
+
+            <div class="row field-action-row">
+              <div class="col field-action-btn-col">
+                <button id="listFieldsBtn" class="secondary" type="button">列出字段</button>
+              </div>
+              <div class="col field-action-input-col">
+                <label for="viewField">Field</label>
+                <input id="viewField" type="text" placeholder="选择或输入一个 field" />
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col">
+                <button id="viewFieldBtn" type="button">读取并可视化</button>
+              </div>
+            </div>
+
+            <div id="fieldList" class="viewer" style="display:none;"></div>
+            <div id="fieldViewer" class="viewer" style="margin-top:8px;"></div>
+          </div>
+        </div>
+
+        <div class="section snap-section">
+          <h2>7. 清空目标 DB</h2>
+          <div class="warning-box">危险操作：清空目标 DB，需要输入完整后端确认码。</div>
+          <button id="flushBtn" class="danger" type="button">清空目标 DB</button>
         </div>
       </div>
 
-      <div class="section snap-section">
-        <h2>7. 清空目标 DB</h2>
-        <div class="warning-box">危险操作：清空目标 DB，需要输入完整后端确认码。</div>
-        <button id="flushBtn" class="danger" type="button">清空目标 DB</button>
+      <!-- ========================= MySQL 面板 ========================= -->
+      <div id="tab-app-mysql" class="app-tab-panel">
+        <div class="section">
+          <div class="section-heading">
+            <div>
+              <h2>MySQL 连接</h2>
+              <div class="small">连接在系统设置中管理；大文件 dump 走后端流式导入。</div>
+            </div>
+            <span id="statusPill" class="wb-status-pill">
+              <span class="dot"></span>
+              <span id="statusText">就绪</span>
+            </span>
+          </div>
+          <select id="connectionSelect" class="wb-connection-select"></select>
+          <div id="connectionMeta" class="wb-connection-meta"></div>
+          <div class="mysql-links">
+            <a href="mysql.html" target="_blank" rel="noopener noreferrer">在新标签打开完整工作台 ↗</a>
+            <a href="options.html" target="_blank" rel="noopener noreferrer">管理连接</a>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="wb-tabs">
+            <button type="button" class="active" data-tab="query">查询</button>
+            <button type="button" data-tab="execute">执行</button>
+            <button type="button" data-tab="import">导入</button>
+          </div>
+
+          <div id="tab-query" class="wb-tab-panel active">
+            <div class="wb-editor-wrap">
+              <div class="wb-editor-toolbar">
+                <span class="label">SELECT only · LIMIT 200</span>
+                <button type="button" class="secondary" id="loadTablesBtn">加载表列表</button>
+              </div>
+              <textarea id="queryEditor" class="wb-editor" spellcheck="false" placeholder="SELECT * FROM account LIMIT 20"></textarea>
+            </div>
+            <div class="wb-actions">
+              <button type="button" class="primary" id="runQueryBtn">运行查询</button>
+              <button type="button" class="secondary" id="exportCsvBtn">导出 CSV</button>
+            </div>
+            <div id="queryMeta" class="wb-result-meta"></div>
+            <div id="queryTableWrap" class="wb-table-wrap">
+              <div class="wb-empty">查询结果将显示在这里</div>
+            </div>
+            <div class="wb-pagination">
+              <button type="button" class="secondary" id="queryPrevBtn">上一页</button>
+              <span id="queryPageInfo" class="subtitle">第 0 / 0 页</span>
+              <button type="button" class="secondary" id="queryNextBtn">下一页</button>
+            </div>
+          </div>
+
+          <div id="tab-execute" class="wb-tab-panel">
+            <div class="wb-editor-wrap">
+              <div class="wb-editor-toolbar">
+                <span class="label">Mutation / DDL · 需要确认码</span>
+              </div>
+              <textarea id="executeEditor" class="wb-editor" spellcheck="false" placeholder="UPDATE player SET gold = 999999 WHERE uid = 10001"></textarea>
+            </div>
+            <div class="wb-actions">
+              <button type="button" class="primary" id="runExecuteBtn">执行语句</button>
+              <label class="wb-checkbox">
+                <input id="allowDangerous" type="checkbox" />
+                允许危险语句
+              </label>
+            </div>
+            <div id="executeResult" class="wb-empty">执行结果将显示在这里</div>
+          </div>
+
+          <div id="tab-import" class="wb-tab-panel">
+            <div class="wb-import-path">
+              <label for="importPath">服务器本地 SQL 文件路径</label>
+              <input id="importPath" type="text" value="data/test_data.sql" placeholder="data/test_data.sql 或绝对路径" />
+              <div class="subtitle">
+                大文件 dump 请勿通过浏览器上传，填写后端可访问的路径，由 Rust 流式读取。
+              </div>
+              <div class="wb-actions">
+                <button type="button" class="primary" id="startImportBtn">开始导入</button>
+                <button type="button" class="danger" id="cancelImportBtn" disabled>取消导入</button>
+              </div>
+              <div id="importConfirmHint" class="subtitle"></div>
+            </div>
+
+            <div class="wb-progress-card">
+              <h4>导入进度</h4>
+              <div class="wb-progress-bar"><span id="importProgressBar"></span></div>
+              <div class="wb-stat-grid">
+                <div class="wb-stat">
+                  <div class="label">状态</div>
+                  <div class="value" id="importStatus">idle</div>
+                </div>
+                <div class="wb-stat">
+                  <div class="label">进度</div>
+                  <div class="value" id="importPercent">0%</div>
+                </div>
+                <div class="wb-stat">
+                  <div class="label">速度</div>
+                  <div class="value" id="importSpeed">0 B/s</div>
+                </div>
+                <div class="wb-stat">
+                  <div class="label">预计剩余</div>
+                  <div class="value" id="importEta">--</div>
+                </div>
+                <div class="wb-stat">
+                  <div class="label">已执行语句</div>
+                  <div class="value" id="importStatements">0</div>
+                </div>
+                <div class="wb-stat">
+                  <div class="label">已跳过</div>
+                  <div class="value" id="importSkipped">0</div>
+                </div>
+              </div>
+              <div id="importPreview" class="subtitle" style="margin-top:12px;color:#94a3b8;"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-heading">
+            <div><h2>SQL 历史</h2></div>
+            <label class="wb-checkbox">
+              <input id="historyFavoriteOnly" type="checkbox" />
+              仅收藏
+            </label>
+          </div>
+          <div class="small">点击复用，右键切换收藏。</div>
+          <div id="historyList" class="wb-history-list"></div>
+        </div>
       </div>
     </div>
   </div>
 
+  <div id="toast" class="wb-toast"></div>
+
+  <script src="shared.js"></script>
   <script src="popup.js"></script>
+  <script src="mysql.js"></script>
 </body>
 </html>
