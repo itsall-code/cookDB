@@ -7,6 +7,7 @@
 
 # 本地测试数据 dump（体积大，勿上传）
 /data/
+/backend/data/
 
 # Cargo lock file (libraries should ignore, binaries should keep)
 # Cargo.lock
@@ -39,5 +40,3 @@ criterion/
 ./src/__pycache__/*
 *.pyc
 
-# 通用第三方 Cursor 技能（非本项目专属，体积较大，勿上传）
-.cursor/skills/ui-ux-pro-max/

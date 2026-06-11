@@ -19,13 +19,15 @@
     │   └── gap-analysis.md   # 现状差距
     ├── mysql-p0/             # P0 实现指南
     ├── mysql-p1/             # P1 实现指南
-    └── mysql-p2/             # P2 实现指南
+    ├── mysql-p2/             # P2 实现指南
+    ├── fd/                   # 前端视觉设计（差异化 UI）
+    └── ui-ux-pro-max/        # UI/UX 设计系统检索（配色、字体、组件规范）
 ```
 
 ## 使用方式
 
 - **Rules**：编辑相关文件时自动生效（`cook-tools` 始终生效）
-- **Skills**：实现具体阶段功能时加载 `mysql-p0` / `mysql-p1` / `mysql-p2`
+- **Skills**：实现具体阶段功能时加载 `mysql-p0` / `mysql-p1` / `mysql-p2`；做界面优化时加载 `fd` / `ui-ux-pro-max`
 
 ## 实现顺序
 

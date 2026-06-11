@@ -45,10 +45,16 @@ async function loadAppState() {
     await chrome.storage.local.set({ activeEnv });
   }
 
+  const rawHistory = data.sqlHistory || [];
+  const sqlHistory = trimSqlHistory(rawHistory);
+  if (JSON.stringify(sqlHistory) !== JSON.stringify(rawHistory)) {
+    await chrome.storage.local.set({ sqlHistory });
+  }
+
   return {
     settings,
     activeEnv,
-    sqlHistory: data.sqlHistory || [],
+    sqlHistory,
     mysqlActiveConnectionId: data.mysqlActiveConnectionId || settings.mysqlConnections[0]?.id || "local",
   };
 }
@@ -137,21 +143,76 @@ function uuid() {
   return crypto.randomUUID();
 }
 
+function normalizeSqlForHistory(sql) {
+  return String(sql || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function sqlHistoryKey(entry) {
+  return `${entry.type || "query"}|${entry.connectionName || ""}|${normalizeSqlForHistory(entry.sql)}`;
+}
+
+function dedupeSqlHistoryList(history) {
+  const byKey = new Map();
+  const sorted = [...history].sort((a, b) => (b.executedAt || 0) - (a.executedAt || 0));
+  for (const item of sorted) {
+    const key = sqlHistoryKey(item);
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, { ...item, runCount: item.runCount || 1 });
+      continue;
+    }
+    byKey.set(key, {
+      ...item,
+      id: item.id,
+      favorite: prev.favorite || item.favorite,
+      runCount: (prev.runCount || 1) + (item.runCount || 1),
+      durationMs: item.durationMs ?? prev.durationMs,
+      rowCount: item.rowCount ?? prev.rowCount,
+    });
+  }
+  return [...byKey.values()].sort((a, b) => (b.executedAt || 0) - (a.executedAt || 0));
+}
+
+function trimSqlHistory(history) {
+  const deduped = dedupeSqlHistoryList(history);
+  const favorites = deduped.filter((h) => h.favorite);
+  const nonFavorites = deduped.filter((h) => !h.favorite);
+  while (nonFavorites.length > 1000) nonFavorites.pop();
+  return [...favorites, ...nonFavorites].sort((a, b) => (b.executedAt || 0) - (a.executedAt || 0));
+}
+
 async function pushSqlHistory(entry) {
   const data = await chrome.storage.local.get(["sqlHistory"]);
   const history = data.sqlHistory || [];
-  history.unshift({
-    id: uuid(),
-    favorite: false,
-    executedAt: Date.now(),
-    ...entry,
-  });
+  const key = sqlHistoryKey(entry);
+  const existingIdx = history.findIndex((h) => sqlHistoryKey(h) === key);
+  const now = Date.now();
 
-  const favorites = history.filter((h) => h.favorite);
-  const nonFavorites = history.filter((h) => !h.favorite);
-  while (nonFavorites.length > 1000) nonFavorites.pop();
+  if (existingIdx >= 0) {
+    const existing = history[existingIdx];
+    history.splice(existingIdx, 1);
+    history.unshift({
+      ...existing,
+      ...entry,
+      id: existing.id,
+      favorite: existing.favorite,
+      executedAt: now,
+      runCount: (existing.runCount || 1) + 1,
+    });
+  } else {
+    history.unshift({
+      id: uuid(),
+      favorite: false,
+      executedAt: now,
+      runCount: 1,
+      ...entry,
+    });
+  }
 
-  const merged = [...favorites, ...nonFavorites].sort((a, b) => b.executedAt - a.executedAt);
+  const merged = trimSqlHistory(history);
   await chrome.storage.local.set({ sqlHistory: merged });
   return merged;
 }
@@ -183,6 +244,12 @@ function escapeHtml(value) {
 
 const APP_TAB_ORDER_KEY = "appTabOrder";
 const MYSQL_LOOKUP_CACHE_KEY = "mysqlLookupCache";
+const MYSQL_BATCH_IMPORT_MAPPING_KEY = "mysqlBatchImportMapping";
+const MYSQL_BATCH_IMPORT_HISTORY_KEY = "mysqlBatchImportHistory";
+const MYSQL_BATCH_FLUSH_CONFIG_KEY = "mysqlBatchFlushConfig";
+const MYSQL_BATCH_FLUSH_HISTORY_KEY = "mysqlBatchFlushHistory";
+const BATCH_IMPORT_HISTORY_LIMIT = 50;
+const BATCH_FLUSH_HISTORY_LIMIT = 50;
 
 async function loadMysqlLookupCache(connectionId) {
   if (!connectionId) return null;
@@ -195,6 +262,212 @@ async function loadMysqlLookupCache(connectionId) {
     keyColumn: entry.keyColumn || entry.key_column || "",
     valueColumn: entry.valueColumn || entry.value_column || "",
   };
+}
+
+function normalizeBatchImportUi(rawUi) {
+  const ui = rawUi && typeof rawUi === "object" ? rawUi : {};
+  const pick = (key, legacy) =>
+    ui[key] !== undefined ? Boolean(ui[key]) : ui[legacy] !== undefined ? Boolean(ui[legacy]) : true;
+  return {
+    composeCollapsed: pick("composeCollapsed", "branchCollapsed"),
+    historyCollapsed: pick("historyCollapsed", "sqlCollapsed"),
+  };
+}
+
+function normalizeMysqlBatchImportConfig(raw) {
+  if (!raw || typeof raw !== "object") {
+    return { enabled: [], files: {}, ui: normalizeBatchImportUi(null) };
+  }
+  if (Array.isArray(raw.enabled) && raw.files && typeof raw.files === "object") {
+    return {
+      enabled: raw.enabled.filter((id) => typeof id === "string"),
+      files: { ...raw.files },
+      ui: normalizeBatchImportUi(raw.ui),
+    };
+  }
+  const files = {};
+  const enabled = [];
+  for (const [key, value] of Object.entries(raw)) {
+    if (key === "ui") continue;
+    if (typeof value === "string" && value) {
+      files[key] = value;
+      enabled.push(key);
+    }
+  }
+  return { enabled, files, ui: normalizeBatchImportUi(raw.ui) };
+}
+
+async function loadMysqlBatchImportConfig() {
+  const data = await chrome.storage.local.get([MYSQL_BATCH_IMPORT_MAPPING_KEY]);
+  return normalizeMysqlBatchImportConfig(data[MYSQL_BATCH_IMPORT_MAPPING_KEY]);
+}
+
+async function saveMysqlBatchImportConfig(config) {
+  const normalized = normalizeMysqlBatchImportConfig(config);
+  await chrome.storage.local.set({ [MYSQL_BATCH_IMPORT_MAPPING_KEY]: normalized });
+  return normalized;
+}
+
+function batchImportMappingKey(enabled, files) {
+  return (enabled || [])
+    .filter((id) => files?.[id])
+    .sort()
+    .map((id) => `${id}::${files[id]}`)
+    .join("|");
+}
+
+function buildBatchImportSummary(enabled, files, connectionsById = {}) {
+  const parts = (enabled || [])
+    .filter((id) => files?.[id])
+    .map((id) => {
+      const name = connectionsById[id]?.name || id;
+      const fileName = String(files[id]).split(/[/\\]/).pop() || files[id];
+      return `${name} → ${fileName}`;
+    });
+  return parts.join(" · ");
+}
+
+function normalizeBatchImportHistoryEntry(raw, connectionsById = {}) {
+  if (!raw || typeof raw !== "object") return null;
+  const enabled = Array.isArray(raw.enabled) ? raw.enabled.filter((id) => typeof id === "string") : [];
+  const files =
+    raw.files && typeof raw.files === "object"
+      ? Object.fromEntries(Object.entries(raw.files).filter(([, path]) => typeof path === "string" && path))
+      : {};
+  const validEnabled = enabled.filter((id) => files[id]);
+  if (!validEnabled.length) return null;
+  return {
+    id: typeof raw.id === "string" ? raw.id : uuid(),
+    savedAt: Number(raw.savedAt) || Date.now(),
+    enabled: validEnabled,
+    files: { ...files },
+    summary: raw.summary || buildBatchImportSummary(validEnabled, files, connectionsById),
+  };
+}
+
+async function loadMysqlBatchImportHistory() {
+  const data = await chrome.storage.local.get([MYSQL_BATCH_IMPORT_HISTORY_KEY]);
+  const list = Array.isArray(data[MYSQL_BATCH_IMPORT_HISTORY_KEY]) ? data[MYSQL_BATCH_IMPORT_HISTORY_KEY] : [];
+  return list
+    .map((item) => normalizeBatchImportHistoryEntry(item))
+    .filter(Boolean);
+}
+
+async function upsertMysqlBatchImportHistory(preset, connectionsById = {}) {
+  const enabled = (preset.enabled || []).filter((id) => preset.files?.[id]);
+  if (!enabled.length) return loadMysqlBatchImportHistory();
+
+  const key = batchImportMappingKey(enabled, preset.files);
+  const history = await loadMysqlBatchImportHistory();
+  const summary = buildBatchImportSummary(enabled, preset.files, connectionsById);
+  const existingIdx = history.findIndex((item) => batchImportMappingKey(item.enabled, item.files) === key);
+  const entry = {
+    id: existingIdx >= 0 ? history[existingIdx].id : uuid(),
+    savedAt: Date.now(),
+    enabled: [...enabled],
+    files: { ...preset.files },
+    summary,
+  };
+
+  if (existingIdx >= 0) history.splice(existingIdx, 1);
+  history.unshift(entry);
+  while (history.length > BATCH_IMPORT_HISTORY_LIMIT) history.pop();
+  await chrome.storage.local.set({ [MYSQL_BATCH_IMPORT_HISTORY_KEY]: history });
+  return history;
+}
+
+async function deleteMysqlBatchImportHistoryEntry(id) {
+  const history = await loadMysqlBatchImportHistory();
+  const next = history.filter((item) => item.id !== id);
+  await chrome.storage.local.set({ [MYSQL_BATCH_IMPORT_HISTORY_KEY]: next });
+  return next;
+}
+
+function normalizeMysqlBatchFlushConfig(raw) {
+  if (!raw || typeof raw !== "object") {
+    return { enabled: [], ui: normalizeBatchImportUi(null) };
+  }
+  return {
+    enabled: Array.isArray(raw.enabled) ? raw.enabled.filter((id) => typeof id === "string") : [],
+    ui: normalizeBatchImportUi(raw.ui),
+  };
+}
+
+async function loadMysqlBatchFlushConfig() {
+  const data = await chrome.storage.local.get([MYSQL_BATCH_FLUSH_CONFIG_KEY]);
+  return normalizeMysqlBatchFlushConfig(data[MYSQL_BATCH_FLUSH_CONFIG_KEY]);
+}
+
+async function saveMysqlBatchFlushConfig(config) {
+  const normalized = normalizeMysqlBatchFlushConfig(config);
+  await chrome.storage.local.set({ [MYSQL_BATCH_FLUSH_CONFIG_KEY]: normalized });
+  return normalized;
+}
+
+function batchFlushMappingKey(enabled) {
+  return (enabled || []).slice().sort().join("|");
+}
+
+function buildBatchFlushSummary(enabled, connectionsById = {}) {
+  return (enabled || [])
+    .map((id) => {
+      const conn = connectionsById[id];
+      if (!conn) return id;
+      return `${conn.name} → ${conn.database || "?"}`;
+    })
+    .join(" · ");
+}
+
+function normalizeBatchFlushHistoryEntry(raw, connectionsById = null) {
+  if (!raw || typeof raw !== "object") return null;
+  const enabled = Array.isArray(raw.enabled) ? raw.enabled.filter((id) => typeof id === "string") : [];
+  if (!enabled.length) return null;
+  const validEnabled =
+    connectionsById && Object.keys(connectionsById).length > 0
+      ? enabled.filter((id) => connectionsById[id]?.database)
+      : enabled;
+  if (!validEnabled.length) return null;
+  return {
+    id: typeof raw.id === "string" ? raw.id : uuid(),
+    savedAt: Number(raw.savedAt) || Date.now(),
+    enabled: validEnabled,
+    summary: raw.summary || buildBatchFlushSummary(validEnabled, connectionsById || {}),
+  };
+}
+
+async function loadMysqlBatchFlushHistory() {
+  const data = await chrome.storage.local.get([MYSQL_BATCH_FLUSH_HISTORY_KEY]);
+  const list = Array.isArray(data[MYSQL_BATCH_FLUSH_HISTORY_KEY]) ? data[MYSQL_BATCH_FLUSH_HISTORY_KEY] : [];
+  return list.map((item) => normalizeBatchFlushHistoryEntry(item)).filter(Boolean);
+}
+
+async function upsertMysqlBatchFlushHistory(preset, connectionsById = {}) {
+  const enabled = (preset.enabled || []).filter((id) => connectionsById[id]?.database);
+  if (!enabled.length) return loadMysqlBatchFlushHistory();
+
+  const key = batchFlushMappingKey(enabled);
+  const history = await loadMysqlBatchFlushHistory();
+  const summary = buildBatchFlushSummary(enabled, connectionsById);
+  const existingIdx = history.findIndex((item) => batchFlushMappingKey(item.enabled) === key);
+  const entry = {
+    id: existingIdx >= 0 ? history[existingIdx].id : uuid(),
+    savedAt: Date.now(),
+    enabled: [...enabled],
+    summary,
+  };
+
+  if (existingIdx >= 0) history.splice(existingIdx, 1);
+  history.unshift(entry);
+  while (history.length > BATCH_FLUSH_HISTORY_LIMIT) history.pop();
+  await chrome.storage.local.set({ [MYSQL_BATCH_FLUSH_HISTORY_KEY]: history });
+  return history;
+}
+
+async function deleteMysqlBatchFlushHistoryEntry(id) {
+  const history = await loadMysqlBatchFlushHistory();
+  const next = history.filter((item) => item.id !== id);
+  await chrome.storage.local.set({ [MYSQL_BATCH_FLUSH_HISTORY_KEY]: next });
+  return next;
 }
 
 async function saveMysqlLookupCache(connectionId, prefs) {

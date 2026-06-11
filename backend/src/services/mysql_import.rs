@@ -153,8 +153,10 @@ pub async fn start_import(
                 "mysql import job failed"
             );
             let mut progress = inner.progress.lock().await;
-            progress.status = ImportStatus::Failed;
-            progress.error = Some(err.to_string());
+            if progress.status != ImportStatus::Completed {
+                progress.status = ImportStatus::Failed;
+                progress.error = Some(err.to_string());
+            }
         }
     });
 
@@ -478,6 +480,7 @@ async fn import_via_mysql_cli(
         progress.elapsed_ms = started.elapsed().as_millis() as u64;
         progress.bytes_per_sec = speed(progress.bytes_read, progress.elapsed_ms);
         progress.eta_sec = Some(0);
+        progress.error = None;
         progress.current_preview = Some("imported via mysql client".to_string());
         info!(
             job_id = %job_id,
@@ -601,8 +604,8 @@ async fn import_via_sqlx(
             .trim();
         // Tail may only contain mysqldump session-restore comments (e.g. /*!40103 SET ... */;).
         // Strip a leading conditional comment wrapper before deciding whether it is executable.
-        let sql = strip_versioned_comment(tail);
-        if !sql.is_empty() && !should_skip_statement(sql) {
+        let sql = normalize_executable_statement(strip_versioned_comment(tail));
+        if !sql.is_empty() && !should_skip_statement(&sql) {
             execute_import_statement(
                 &mut conn,
                 &inner,
@@ -634,6 +637,7 @@ async fn import_via_sqlx(
         progress.elapsed_ms = started.elapsed().as_millis() as u64;
         progress.bytes_per_sec = speed(progress.bytes_read, progress.elapsed_ms);
         progress.eta_sec = Some(0);
+        progress.error = None;
         progress.current_preview = None;
 
         info!(
@@ -794,8 +798,54 @@ fn is_ddl_statement(sql: &str) -> bool {
 }
 
 fn should_skip_statement(sql: &str) -> bool {
-    let upper = normalize_dump_statement(sql);
-    upper.starts_with("SET ") || upper.starts_with("CHANGE MASTER") || upper.starts_with("USE ")
+    let sql = normalize_executable_statement(sql);
+    if sql.is_empty() {
+        return true;
+    }
+    let upper = normalize_dump_statement(&sql);
+    upper.starts_with("SET ")
+        || upper.starts_with("CHANGE MASTER")
+        || upper.starts_with("USE ")
+        || upper.starts_with("--")
+        || upper.contains("DUMP COMPLETED")
+}
+
+/// Strip comments and leading semicolons so mysqldump footers like `; -- Dump completed …` are ignored.
+fn normalize_executable_statement(sql: &str) -> String {
+    strip_inline_comments(sql)
+        .trim()
+        .trim_end_matches(';')
+        .trim()
+        .trim_start_matches(';')
+        .trim()
+        .to_string()
+}
+
+fn strip_inline_comments(sql: &str) -> String {
+    let raw = sql.as_bytes();
+    let mut out = String::with_capacity(sql.len());
+    let mut i = 0usize;
+    while i < raw.len() {
+        if is_line_comment_start(raw, i) {
+            break;
+        }
+        if raw[i] == b'/' && i + 1 < raw.len() && raw[i + 1] == b'*' {
+            if let Some(end) = find_block_comment_end(raw, i + 2) {
+                i = end;
+                continue;
+            }
+        }
+        let ch = raw[i];
+        if ch == b'\'' || ch == b'"' || ch == b'`' {
+            let start = i;
+            i = skip_quoted(raw, i, ch).unwrap_or(raw.len());
+            out.push_str(std::str::from_utf8(&raw[start..i]).unwrap_or(""));
+            continue;
+        }
+        out.push(ch as char);
+        i += 1;
+    }
+    out
 }
 
 /// Strip leading mysqldump version digits accidentally included in conditional comments.
@@ -875,8 +925,9 @@ fn extract_next_statement(raw: &[u8]) -> Option<(String, usize)> {
         if ch == b';' {
             let stmt_bytes = &raw[stmt_start..=i];
             let stmt = std::str::from_utf8(stmt_bytes).ok()?.trim();
-            if !stmt.is_empty() && stmt != ";" {
-                return Some((stmt.trim_end_matches(';').to_string(), i + 1));
+            let normalized = normalize_executable_statement(stmt);
+            if !normalized.is_empty() {
+                return Some((normalized, i + 1));
             }
             i += 1;
             stmt_start = i;
@@ -975,4 +1026,41 @@ fn speed(bytes: u64, elapsed_ms: u64) -> u64 {
 async fn update_bytes_cli(inner: &Arc<ImportJobInner>, bytes_read: u64, started: Instant) {
     inner.bytes_read.store(bytes_read, Ordering::Relaxed);
     sync_progress(inner, bytes_read, started, None).await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn skips_mysqldump_footer_on_same_line_as_semicolon() {
+        let raw = b"; -- Dump completed on 2026-06-06 3:00:51\n";
+        assert!(extract_next_statement(raw).is_none());
+    }
+
+    #[test]
+    fn skips_mysqldump_footer_comment_line() {
+        assert!(should_skip_statement("-- Dump completed on 2026-06-06  3:00:51"));
+        assert!(normalize_executable_statement("-- Dump completed on 2026-06-06  3:00:51").is_empty());
+    }
+
+    #[test]
+    fn preserves_insert_with_inline_dash_dash_in_string() {
+        let raw = b"INSERT INTO t (c) VALUES ('a--b');\n";
+        let (stmt, _) = extract_next_statement(raw).expect("statement");
+        assert_eq!(stmt, "INSERT INTO t (c) VALUES ('a--b')");
+    }
+
+    #[test]
+    fn skips_semicolon_then_footer_after_versioned_set() {
+        let raw = b"/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;\n-- Dump completed on 2026-06-06  3:00:51\n";
+        let (stmt, consumed) = extract_next_statement(raw).expect("set statement");
+        assert!(stmt.contains("SQL_NOTES"));
+        assert!(should_skip_statement(&stmt));
+        let rest = &raw[consumed..];
+        assert!(extract_next_statement(rest).is_none());
+        assert!(should_skip_statement(
+            std::str::from_utf8(rest).unwrap().trim()
+        ));
+    }
 }

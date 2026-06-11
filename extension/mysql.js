@@ -26,6 +26,32 @@ const els = {
   importStatements: $("importStatements"),
   importSkipped: $("importSkipped"),
   importPreview: $("importPreview"),
+  importProgressPanel: $("importProgressPanel"),
+  batchComposeList: $("batchComposeList"),
+  batchComposeBody: $("batchComposeBody"),
+  batchComposeSection: $("batchComposeSection"),
+  batchComposeSummary: $("batchComposeSummary"),
+  toggleBatchComposeSection: $("toggleBatchComposeSection"),
+  batchImportHistoryList: $("batchImportHistoryList"),
+  batchHistoryBody: $("batchHistoryBody"),
+  batchHistorySection: $("batchHistorySection"),
+  batchHistorySummary: $("batchHistorySummary"),
+  batchHistoryEmptyHint: $("batchHistoryEmptyHint"),
+  toggleBatchHistorySection: $("toggleBatchHistorySection"),
+  batchImportSavedHint: $("batchImportSavedHint"),
+  importBatchMeta: $("importBatchMeta"),
+  batchFlushComposeList: $("batchFlushComposeList"),
+  batchFlushComposeSection: $("batchFlushComposeSection"),
+  batchFlushComposeSummary: $("batchFlushComposeSummary"),
+  toggleBatchFlushComposeSection: $("toggleBatchFlushComposeSection"),
+  batchFlushHistoryList: $("batchFlushHistoryList"),
+  batchFlushHistorySection: $("batchFlushHistorySection"),
+  batchFlushHistorySummary: $("batchFlushHistorySummary"),
+  batchFlushHistoryEmptyHint: $("batchFlushHistoryEmptyHint"),
+  toggleBatchFlushHistorySection: $("toggleBatchFlushHistorySection"),
+  batchFlushSavedHint: $("batchFlushSavedHint"),
+  flushBatchMeta: $("flushBatchMeta"),
+  flushSingleMeta: $("flushSingleMeta"),
   toast: $("toast"),
 };
 
@@ -37,6 +63,23 @@ let queryPage = 1;
 const PAGE_SIZE = 50;
 let importJobId = null;
 let importPollTimer = null;
+let importPollInFlight = false;
+let importTerminalHandled = false;
+let importCompleteWaiter = null;
+let importBatchQueue = [];
+let importBatchRunning = false;
+let importBatchAbort = false;
+let importBatchContext = null;
+let batchFlushQueue = [];
+let batchFlushRunning = false;
+let batchFlushAbort = false;
+let batchFlushContext = null;
+let batchImportConfig = { enabled: [], files: {}, ui: { composeCollapsed: true, historyCollapsed: true } };
+let batchImportHistory = [];
+let batchFlushConfig = { enabled: [], ui: { composeCollapsed: true, historyCollapsed: true } };
+let batchFlushHistory = [];
+let batchSaveHintTimer = null;
+let batchFlushSaveHintTimer = null;
 let lookupTables = [];
 let sqlFileList = [];
 
@@ -44,6 +87,84 @@ function getImportPath() {
   const custom = els.importPath?.value.trim();
   if (custom) return custom;
   return els.importPathSelect?.value.trim() || "";
+}
+
+function getConnectionById(connectionId) {
+  const list = appState?.settings?.mysqlConnections || [];
+  return list.find((conn) => conn.id === connectionId) || null;
+}
+
+function setImportCancelButtonsDisabled(disabled) {
+  $("cancelImportBtn") && ($("cancelImportBtn").disabled = disabled);
+  $("cancelBatchImportBtn") && ($("cancelBatchImportBtn").disabled = disabled);
+}
+
+function normalizeImportStatus(status) {
+  if (status == null) return "";
+  return String(status).trim().toLowerCase();
+}
+
+function importStatusLabel(status) {
+  switch (normalizeImportStatus(status)) {
+    case "pending":
+      return "等待中";
+    case "running":
+      return "导入中";
+    case "completed":
+      return "已完成";
+    case "failed":
+      return "失败";
+    case "cancelled":
+      return "已取消";
+    default:
+      return status ? String(status) : "空闲";
+  }
+}
+
+function isImportTerminalStatus(status) {
+  return ["completed", "failed", "cancelled"].includes(normalizeImportStatus(status));
+}
+
+function resetImportUi() {
+  if (els.importProgressBar) els.importProgressBar.style.width = "0%";
+  if (els.importStatus) els.importStatus.textContent = importStatusLabel("idle");
+  if (els.importPercent) els.importPercent.textContent = "0%";
+  if (els.importSpeed) els.importSpeed.textContent = "0 B/s";
+  if (els.importEta) els.importEta.textContent = "--";
+  if (els.importStatements) els.importStatements.textContent = "0";
+  if (els.importSkipped) els.importSkipped.textContent = "0";
+  if (els.importPreview) els.importPreview.textContent = "";
+}
+
+function updateFlushBatchMeta() {
+  if (!els.flushBatchMeta) return;
+  if (!batchFlushRunning || !batchFlushContext) {
+    els.flushBatchMeta.textContent = "";
+    return;
+  }
+  const { index, total, connectionName, database } = batchFlushContext;
+  els.flushBatchMeta.textContent = `批量清库 ${index}/${total} · 分支 ${connectionName} → ${database}`;
+}
+
+function isBatchJobRunning() {
+  return Boolean(importBatchRunning || importJobId || batchFlushRunning);
+}
+
+function updateImportBatchMeta() {
+  if (!els.importBatchMeta) return;
+  if (!importBatchRunning || !importBatchContext) {
+    els.importBatchMeta.textContent = "";
+    return;
+  }
+  const { index, total, filePath, connectionName } = importBatchContext;
+  const fileName = filePath ? filePath.split(/[/\\]/).pop() : filePath;
+  els.importBatchMeta.textContent = `批量导入 ${index}/${total} · 分支 ${connectionName} → ${fileName}`;
+}
+
+function updateImportProgressPanelVisibility(tab = activeTab) {
+  if (!els.importProgressPanel) return;
+  const visible = tab === "import" || tab === "import-batch";
+  els.importProgressPanel.hidden = !visible;
 }
 
 function showToast(message, ok = true) {
@@ -74,7 +195,8 @@ function getEditor(id) {
 }
 
 function getEditorSql(id) {
-  return getEditor(id)?.value.trim() || "";
+  const raw = getEditor(id)?.value.trim() || "";
+  return raw.replace(/;\s*$/, "");
 }
 
 function normalizeQueryResult(data) {
@@ -121,21 +243,27 @@ function renderConnections() {
   });
 
   const conn = getActiveConnection();
+  const connHtml = conn
+    ? `<div>${escapeHtml(conn.name)} · ${escapeHtml(conn.host)}:${conn.port}</div>
+       <div>库：${escapeHtml(conn.database || "(未指定)")}</div>
+       <div>用户：${escapeHtml(conn.username)}</div>`
+    : "请先在设置页添加 MySQL 连接";
+
   if (!conn) {
-    els.connectionMeta.textContent = "请先在设置页添加 MySQL 连接";
+    els.connectionMeta.textContent = connHtml;
+    if (els.flushSingleMeta) els.flushSingleMeta.innerHTML = connHtml;
     return;
   }
 
-  els.connectionMeta.innerHTML = `
-    <div>${escapeHtml(conn.host)}:${conn.port}</div>
-    <div>库：${escapeHtml(conn.database || "(未指定)")}</div>
-    <div>用户：${escapeHtml(conn.username)}</div>
-  `;
+  els.connectionMeta.innerHTML = connHtml;
+  if (els.flushSingleMeta) els.flushSingleMeta.innerHTML = connHtml;
 
   const filePath = getImportPath();
-  els.importConfirmHint.textContent = filePath
-    ? `确认码：${importConfirmText(conn, filePath)}`
-    : "请选择或填写 SQL 文件路径";
+  if (els.importConfirmHint) {
+    els.importConfirmHint.textContent = filePath
+      ? `确认码：${importConfirmText(conn, filePath)}`
+      : "请选择或填写 SQL 文件路径";
+  }
 }
 
 function renderImportPathSelect() {
@@ -167,42 +295,527 @@ function renderImportPathSelect() {
   }
 }
 
+function buildSqlFileSelect(selectedPath = "") {
+  const select = document.createElement("select");
+  select.className = "wb-connection-select wb-batch-sql-select";
+  const blank = document.createElement("option");
+  blank.value = "";
+  blank.textContent = sqlFileList.length ? "请选择 SQL 文件" : "暂无 SQL 文件";
+  select.appendChild(blank);
+  sqlFileList.forEach((file) => {
+    const opt = document.createElement("option");
+    opt.value = file.path;
+    const size = file.size ?? file.size_bytes ?? 0;
+    opt.textContent = `${file.name} (${formatBytes(size)})`;
+    if (file.path === selectedPath) opt.selected = true;
+    select.appendChild(opt);
+  });
+  return select;
+}
+
+async function loadBatchImportConfig() {
+  batchImportConfig = await loadMysqlBatchImportConfig();
+}
+
+async function loadBatchImportHistory() {
+  batchImportHistory = await loadMysqlBatchImportHistory();
+}
+
+function connectionsByIdMap() {
+  const map = {};
+  (appState?.settings?.mysqlConnections || []).forEach((conn) => {
+    map[conn.id] = conn;
+  });
+  return map;
+}
+
+async function savePresetToHistory(preset) {
+  batchImportHistory = await upsertMysqlBatchImportHistory(preset, connectionsByIdMap());
+  renderBatchImportHistory();
+}
+
+async function persistBatchImportConfig() {
+  batchImportConfig = await saveMysqlBatchImportConfig(batchImportConfig);
+  flashBatchSavedHint();
+}
+
+function flashBatchSavedHint() {
+  const hint = els.batchImportSavedHint;
+  if (!hint) return;
+  hint.hidden = false;
+  clearTimeout(batchSaveHintTimer);
+  batchSaveHintTimer = setTimeout(() => {
+    hint.hidden = true;
+  }, 1800);
+}
+
+function isBatchBranchEnabled(connectionId) {
+  return batchImportConfig.enabled.includes(connectionId);
+}
+
+function setBatchBranchEnabled(connectionId, enabled) {
+  const ids = new Set(batchImportConfig.enabled);
+  if (enabled) ids.add(connectionId);
+  else ids.delete(connectionId);
+  batchImportConfig.enabled = [...ids];
+}
+
+function setBatchBranchFile(connectionId, filePath) {
+  if (filePath) batchImportConfig.files[connectionId] = filePath;
+  else delete batchImportConfig.files[connectionId];
+}
+
+function readBatchImportPairsFromUi() {
+  return batchImportConfig.enabled
+    .map((connectionId) => {
+      const connection = getConnectionById(connectionId);
+      const filePath = batchImportConfig.files[connectionId];
+      if (!connection?.database || !filePath) return null;
+      return { connectionId, connection, filePath };
+    })
+    .filter(Boolean);
+}
+
+function pairsFromBatchPreset(preset) {
+  return (preset.enabled || [])
+    .map((connectionId) => {
+      const connection = getConnectionById(connectionId);
+      const filePath = preset.files?.[connectionId];
+      if (!connection?.database || !filePath) return null;
+      return { connectionId, connection, filePath };
+    })
+    .filter(Boolean);
+}
+
+function formatBatchHistoryTime(ts) {
+  try {
+    return new Date(ts).toLocaleString("zh-CN", {
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
+function renderBatchComposeList() {
+  const list = els.batchComposeList;
+  if (!list) return;
+
+  list.innerHTML = "";
+  const connections = appState?.settings?.mysqlConnections || [];
+  if (!connections.length) {
+    list.innerHTML = '<div class="wb-batch-empty">请先在设置页添加 MySQL 连接</div>';
+    return;
+  }
+
+  const header = document.createElement("div");
+  header.className = "wb-batch-compose-head";
+  header.innerHTML = `
+    <span class="wb-batch-compose-col wb-batch-compose-col--check">导入</span>
+    <span class="wb-batch-compose-col wb-batch-compose-col--branch">分支</span>
+    <span class="wb-batch-compose-col wb-batch-compose-col--sql">SQL 文件</span>
+  `;
+  list.appendChild(header);
+
+  connections.forEach((conn) => {
+    const enabled = isBatchBranchEnabled(conn.id);
+    const disabled = !conn.database;
+    const row = document.createElement("div");
+    row.className = `wb-batch-compose-row${enabled ? " is-checked" : ""}${disabled ? " is-disabled" : ""}`;
+    row.dataset.connectionId = conn.id;
+
+    const checkCol = document.createElement("label");
+    checkCol.className = "wb-batch-compose-col wb-batch-compose-col--check";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = enabled;
+    checkbox.disabled = disabled;
+    checkbox.dataset.batchBranch = "1";
+    checkCol.appendChild(checkbox);
+
+    const branchCol = document.createElement("div");
+    branchCol.className = "wb-batch-compose-col wb-batch-compose-col--branch";
+    branchCol.innerHTML = `
+      <strong>${escapeHtml(conn.name)}</strong>
+      <em>${escapeHtml(conn.database || "未配置 database")}</em>
+    `;
+
+    const sqlCol = document.createElement("div");
+    sqlCol.className = "wb-batch-compose-col wb-batch-compose-col--sql";
+    const select = buildSqlFileSelect(batchImportConfig.files[conn.id] || "");
+    select.dataset.batchSql = "1";
+    select.disabled = disabled || !sqlFileList.length;
+    sqlCol.appendChild(select);
+
+    row.appendChild(checkCol);
+    row.appendChild(branchCol);
+    row.appendChild(sqlCol);
+    list.appendChild(row);
+  });
+}
+
+function renderBatchImportHistory() {
+  const list = els.batchImportHistoryList;
+  const emptyHint = els.batchHistoryEmptyHint;
+  if (!list) return;
+
+  list.innerHTML = "";
+  if (!batchImportHistory.length) {
+    if (emptyHint) emptyHint.hidden = false;
+    if (els.batchHistorySummary) els.batchHistorySummary.textContent = "";
+    return;
+  }
+
+  if (emptyHint) emptyHint.hidden = true;
+  if (els.batchHistorySummary) {
+    els.batchHistorySummary.textContent = batchImportHistory.length
+      ? `${batchImportHistory.length} 条`
+      : "";
+  }
+
+  batchImportHistory.forEach((entry) => {
+    const row = document.createElement("div");
+    row.className = "wb-batch-history-item";
+    row.dataset.historyId = entry.id;
+
+    const main = document.createElement("div");
+    main.className = "wb-batch-history-main";
+    main.innerHTML = `
+      <div class="wb-batch-history-summary">${escapeHtml(entry.summary || "")}</div>
+      <div class="wb-batch-history-meta">${entry.enabled.length} 个分支 · ${formatBatchHistoryTime(entry.savedAt)}</div>
+    `;
+
+    const actions = document.createElement("div");
+    actions.className = "wb-batch-history-actions";
+    actions.innerHTML = `
+      <button type="button" class="secondary" data-batch-history-run="${escapeHtml(entry.id)}">运行</button>
+      <button type="button" class="secondary wb-batch-history-delete" data-batch-history-del="${escapeHtml(entry.id)}">删除</button>
+    `;
+
+    row.appendChild(main);
+    row.appendChild(actions);
+    list.appendChild(row);
+  });
+}
+
+function ensureBatchImportUi() {
+  if (!batchImportConfig.ui) {
+    batchImportConfig.ui = { composeCollapsed: true, historyCollapsed: true };
+  }
+}
+
+function updateBatchSectionSummaries() {
+  const enabledCount = batchImportConfig.enabled.length;
+  const mappedCount = batchImportConfig.enabled.filter((id) => batchImportConfig.files[id]).length;
+
+  if (els.batchComposeSummary) {
+    if (!enabledCount) els.batchComposeSummary.textContent = "";
+    else els.batchComposeSummary.textContent = `已选 ${enabledCount} · 已指定 ${mappedCount}/${enabledCount}`;
+  }
+}
+
+function applyBatchSectionCollapse() {
+  ensureBatchImportUi();
+  const { composeCollapsed, historyCollapsed } = batchImportConfig.ui;
+
+  els.batchComposeSection?.classList.toggle("is-collapsed", composeCollapsed);
+  els.toggleBatchComposeSection?.setAttribute("aria-expanded", composeCollapsed ? "false" : "true");
+
+  els.batchHistorySection?.classList.toggle("is-collapsed", historyCollapsed);
+  els.toggleBatchHistorySection?.setAttribute("aria-expanded", historyCollapsed ? "false" : "true");
+}
+
+async function toggleBatchSection(section) {
+  ensureBatchImportUi();
+  const key = section === "compose" ? "composeCollapsed" : "historyCollapsed";
+  batchImportConfig.ui[key] = !batchImportConfig.ui[key];
+  applyBatchSectionCollapse();
+  await persistBatchImportConfig();
+}
+
+function renderBatchImportUi() {
+  renderBatchComposeList();
+  renderBatchImportHistory();
+  updateBatchSectionSummaries();
+  applyBatchSectionCollapse();
+}
+
+async function loadBatchFlushConfig() {
+  batchFlushConfig = await loadMysqlBatchFlushConfig();
+}
+
+async function loadBatchFlushHistory() {
+  batchFlushHistory = await loadMysqlBatchFlushHistory();
+}
+
+async function persistBatchFlushConfig() {
+  batchFlushConfig = await saveMysqlBatchFlushConfig(batchFlushConfig);
+  flashBatchFlushSavedHint();
+}
+
+function flashBatchFlushSavedHint() {
+  const hint = els.batchFlushSavedHint;
+  if (!hint) return;
+  hint.hidden = false;
+  clearTimeout(batchFlushSaveHintTimer);
+  batchFlushSaveHintTimer = setTimeout(() => {
+    hint.hidden = true;
+  }, 1800);
+}
+
+function isBatchFlushBranchEnabled(connectionId) {
+  return batchFlushConfig.enabled.includes(connectionId);
+}
+
+function setBatchFlushBranchEnabled(connectionId, enabled) {
+  const ids = new Set(batchFlushConfig.enabled);
+  if (enabled) ids.add(connectionId);
+  else ids.delete(connectionId);
+  batchFlushConfig.enabled = [...ids];
+}
+
+function readBatchFlushPairsFromUi() {
+  return batchFlushConfig.enabled
+    .map((connectionId) => {
+      const connection = getConnectionById(connectionId);
+      if (!connection?.database) return null;
+      return { connectionId, connection };
+    })
+    .filter(Boolean);
+}
+
+function pairsFromBatchFlushPreset(preset) {
+  return (preset.enabled || [])
+    .map((connectionId) => {
+      const connection = getConnectionById(connectionId);
+      if (!connection?.database) return null;
+      return { connectionId, connection };
+    })
+    .filter(Boolean);
+}
+
+async function saveFlushPresetToHistory(preset) {
+  batchFlushHistory = await upsertMysqlBatchFlushHistory(preset, connectionsByIdMap());
+  renderBatchFlushHistory();
+}
+
+function renderBatchFlushComposeList() {
+  const list = els.batchFlushComposeList;
+  if (!list) return;
+
+  list.innerHTML = "";
+  const connections = appState?.settings?.mysqlConnections || [];
+  if (!connections.length) {
+    list.innerHTML = '<div class="wb-batch-empty">请先在设置页添加 MySQL 连接</div>';
+    return;
+  }
+
+  const header = document.createElement("div");
+  header.className = "wb-batch-compose-head";
+  header.innerHTML = `
+    <span class="wb-batch-compose-col wb-batch-compose-col--check">清库</span>
+    <span class="wb-batch-compose-col wb-batch-compose-col--branch">分支 / 目标库</span>
+  `;
+  list.appendChild(header);
+
+  connections.forEach((conn) => {
+    const enabled = isBatchFlushBranchEnabled(conn.id);
+    const disabled = !conn.database;
+    const row = document.createElement("div");
+    row.className = `wb-batch-compose-row${enabled ? " is-checked" : ""}${disabled ? " is-disabled" : ""}`;
+    row.dataset.connectionId = conn.id;
+
+    const checkCol = document.createElement("label");
+    checkCol.className = "wb-batch-compose-col wb-batch-compose-col--check";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = enabled;
+    checkbox.disabled = disabled;
+    checkbox.dataset.batchFlushBranch = "1";
+    checkCol.appendChild(checkbox);
+
+    const branchCol = document.createElement("div");
+    branchCol.className = "wb-batch-compose-col wb-batch-compose-col--branch";
+    branchCol.innerHTML = `
+      <strong>${escapeHtml(conn.name)}</strong>
+      <em>${escapeHtml(conn.database || "未配置 database")}</em>
+    `;
+
+    row.appendChild(checkCol);
+    row.appendChild(branchCol);
+    list.appendChild(row);
+  });
+}
+
+function renderBatchFlushHistory() {
+  const list = els.batchFlushHistoryList;
+  const emptyHint = els.batchFlushHistoryEmptyHint;
+  if (!list) return;
+
+  list.innerHTML = "";
+  if (!batchFlushHistory.length) {
+    if (emptyHint) emptyHint.hidden = false;
+    if (els.batchFlushHistorySummary) els.batchFlushHistorySummary.textContent = "";
+    return;
+  }
+
+  if (emptyHint) emptyHint.hidden = true;
+  if (els.batchFlushHistorySummary) {
+    els.batchFlushHistorySummary.textContent = batchFlushHistory.length
+      ? `${batchFlushHistory.length} 条`
+      : "";
+  }
+
+  batchFlushHistory.forEach((entry) => {
+    const row = document.createElement("div");
+    row.className = "wb-batch-history-item";
+    row.dataset.historyId = entry.id;
+
+    const main = document.createElement("div");
+    main.className = "wb-batch-history-main";
+    main.innerHTML = `
+      <div class="wb-batch-history-summary">${escapeHtml(entry.summary || "")}</div>
+      <div class="wb-batch-history-meta">${entry.enabled.length} 个分支 · ${formatBatchHistoryTime(entry.savedAt)}</div>
+    `;
+
+    const actions = document.createElement("div");
+    actions.className = "wb-batch-history-actions";
+    actions.innerHTML = `
+      <button type="button" class="secondary" data-batch-flush-history-run="${escapeHtml(entry.id)}">运行</button>
+      <button type="button" class="secondary wb-batch-history-delete" data-batch-flush-history-del="${escapeHtml(entry.id)}">删除</button>
+    `;
+
+    row.appendChild(main);
+    row.appendChild(actions);
+    list.appendChild(row);
+  });
+}
+
+function ensureBatchFlushUi() {
+  if (!batchFlushConfig.ui) {
+    batchFlushConfig.ui = { composeCollapsed: true, historyCollapsed: true };
+  }
+}
+
+function updateBatchFlushSectionSummaries() {
+  const enabledCount = batchFlushConfig.enabled.length;
+  if (els.batchFlushComposeSummary) {
+    els.batchFlushComposeSummary.textContent = enabledCount ? `已选 ${enabledCount} 个分支` : "";
+  }
+}
+
+function applyBatchFlushSectionCollapse() {
+  ensureBatchFlushUi();
+  const { composeCollapsed, historyCollapsed } = batchFlushConfig.ui;
+
+  els.batchFlushComposeSection?.classList.toggle("is-collapsed", composeCollapsed);
+  els.toggleBatchFlushComposeSection?.setAttribute("aria-expanded", composeCollapsed ? "false" : "true");
+
+  els.batchFlushHistorySection?.classList.toggle("is-collapsed", historyCollapsed);
+  els.toggleBatchFlushHistorySection?.setAttribute("aria-expanded", historyCollapsed ? "false" : "true");
+}
+
+async function toggleBatchFlushSection(section) {
+  ensureBatchFlushUi();
+  const key = section === "compose" ? "composeCollapsed" : "historyCollapsed";
+  batchFlushConfig.ui[key] = !batchFlushConfig.ui[key];
+  applyBatchFlushSectionCollapse();
+  await persistBatchFlushConfig();
+}
+
+function renderBatchFlushUi() {
+  renderBatchFlushComposeList();
+  renderBatchFlushHistory();
+  updateBatchFlushSectionSummaries();
+  applyBatchFlushSectionCollapse();
+}
+
+function setBatchFlushCancelButtonsDisabled(disabled) {
+  const btn = $("cancelBatchFlushBtn");
+  if (btn) btn.disabled = disabled;
+}
+
 async function loadSqlFiles() {
-  if (!els.importPathSelect) return;
+  if (!els.importPathSelect && !els.batchComposeList) return;
 
   try {
     const payload = await apiFetch(appState, "/api/mysql/sql-files", { method: "GET" });
     sqlFileList = payload.data || [];
     renderImportPathSelect();
+    renderBatchImportUi();
     renderConnections();
   } catch (err) {
     sqlFileList = [];
     renderImportPathSelect();
+    renderBatchImportUi();
     showToast(`加载 SQL 列表失败：${err.message}`, false);
   }
 }
 
+function formatHistoryTime(ts) {
+  if (!ts) return "";
+  const diff = Date.now() - ts;
+  if (diff < 60_000) return "刚刚";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`;
+  const d = new Date(ts);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function formatHistoryStats(item) {
+  const parts = [];
+  if (item.type === "query" && item.rowCount != null) parts.push(`${item.rowCount} 行`);
+  if (item.durationMs != null) parts.push(`${item.durationMs} ms`);
+  if (item.runCount > 1) parts.push(`执行 ${item.runCount} 次`);
+  return parts.join(" · ");
+}
+
+function updateHistoryHint(count) {
+  const hint = $("historyHint");
+  if (!hint) return;
+  hint.textContent = count
+    ? `共 ${count} 条 · 点击卡片复用 · SQL 区可选中复制 · 右键收藏`
+    : "执行查询后会自动记录 · 右键切换收藏";
+}
+
 function renderHistory() {
-  const onlyFavorite = els.historyFavoriteOnly.checked;
-  const history = (appState.sqlHistory || []).filter((item) => !onlyFavorite || item.favorite);
+  const onlyFavorite = els.historyFavoriteOnly?.checked;
+  let history = dedupeSqlHistoryList(appState?.sqlHistory || []);
+  if (onlyFavorite) history = history.filter((item) => item.favorite);
+  updateHistoryHint(history.length);
+
+  if (!els.historyList) return;
   els.historyList.innerHTML = "";
 
   if (!history.length) {
-    els.historyList.innerHTML = '<div class="subtitle" style="color:#94a3b8;">暂无历史记录</div>';
+    els.historyList.innerHTML = '<div class="wb-history-empty">暂无历史记录</div>';
     return;
   }
 
-  history.slice(0, 30).forEach((item) => {
+  const frag = document.createDocumentFragment();
+  history.slice(0, 50).forEach((item) => {
     const row = document.createElement("div");
-    row.className = "wb-history-item";
+    const typeLabel = item.type === "execute" ? "执行" : "查询";
+    const typeClass = item.type === "execute" ? "execute" : "query";
+    const stats = formatHistoryStats(item);
+    row.className = `wb-history-item${item.favorite ? " is-favorite" : ""}`;
+    row.title = item.sql;
     row.innerHTML = `
-      <div class="sql-preview">${escapeHtml(item.sql)}</div>
-      <div class="meta">
-        <span>${escapeHtml(item.connectionName || "")} · ${item.type}</span>
-        <span>${item.favorite ? "★" : "☆"}</span>
+      <div class="wb-history-head">
+        <span class="wb-history-type wb-history-type--${typeClass}">${typeLabel}</span>
+        <span class="wb-history-conn">${escapeHtml(item.connectionName || "未命名")}</span>
+        <span class="wb-history-time">${formatHistoryTime(item.executedAt)}</span>
+        <span class="wb-history-star" aria-hidden="true">${item.favorite ? "★" : "☆"}</span>
       </div>
+      <div class="sql-preview"><pre class="wb-history-sql">${escapeHtml(item.sql)}</pre></div>
+      ${stats ? `<div class="wb-history-stats">${escapeHtml(stats)}</div>` : ""}
     `;
-    row.addEventListener("click", () => {
+    row.addEventListener("click", (event) => {
+      if (event.target.closest(".wb-history-sql")) return;
       if (item.type === "execute") {
         switchTab("execute");
         const editor = getEditor("executeEditor");
@@ -212,14 +825,21 @@ function renderHistory() {
         const editor = getEditor("queryEditor");
         if (editor) editor.value = item.sql;
       }
+      showToast("已填入编辑器");
     });
     row.addEventListener("contextmenu", async (event) => {
       event.preventDefault();
       appState.sqlHistory = await toggleSqlFavorite(item.id);
       renderHistory();
+      showToast(appState.sqlHistory.find((h) => h.id === item.id)?.favorite ? "已收藏" : "已取消收藏");
     });
-    els.historyList.appendChild(row);
+    frag.appendChild(row);
   });
+  els.historyList.appendChild(frag);
+}
+
+function renderFlushUi() {
+  renderBatchFlushUi();
 }
 
 function switchTab(tab) {
@@ -230,8 +850,15 @@ function switchTab(tab) {
   document.querySelectorAll(".wb-tab-panel").forEach((panel) => {
     panel.classList.toggle("active", panel.id === `tab-${tab}`);
   });
+  updateImportProgressPanelVisibility(tab);
   if (tab === "lookup" && !lookupTables.length) {
     refreshLookupTables().catch(() => {});
+  }
+  if (tab === "import-batch") {
+    renderBatchImportUi();
+  }
+  if (tab === "flush") {
+    renderFlushUi();
   }
 }
 
@@ -687,156 +1314,570 @@ function exportCsv() {
 }
 
 function normalizeImportProgress(progress) {
+  if (!progress) {
+    return {
+      job_id: null,
+      status: "",
+      file_path: "",
+      file_size: 0,
+      bytes_read: 0,
+      statements_executed: 0,
+      statements_skipped: 0,
+      bytes_per_sec: 0,
+      eta_sec: null,
+      error: null,
+      current_preview: null,
+    };
+  }
+
+  const status = normalizeImportStatus(progress.status);
   return {
-    job_id: progress.job_id ?? progress.jobId,
-    status: progress.status,
-    file_path: progress.file_path ?? progress.filePath,
+    job_id: progress.job_id ?? progress.jobId ?? null,
+    status,
+    file_path: progress.file_path ?? progress.filePath ?? "",
     file_size: progress.file_size ?? progress.fileSize ?? 0,
     bytes_read: progress.bytes_read ?? progress.bytesRead ?? 0,
     statements_executed: progress.statements_executed ?? progress.statementsExecuted ?? 0,
     statements_skipped: progress.statements_skipped ?? progress.statementsSkipped ?? 0,
     bytes_per_sec: progress.bytes_per_sec ?? progress.bytesPerSec ?? 0,
     eta_sec: progress.eta_sec ?? progress.etaSec,
-    error: progress.error,
-    current_preview: progress.current_preview ?? progress.currentPreview,
+    error: progress.error ?? null,
+    current_preview: progress.current_preview ?? progress.currentPreview ?? null,
   };
 }
 
 function updateImportUi(rawProgress) {
+  if (!els.importProgressBar) return;
+
   const progress = normalizeImportProgress(rawProgress);
   const percent = progress.file_size
     ? Math.min(100, Math.round((progress.bytes_read / progress.file_size) * 100))
     : 0;
   els.importProgressBar.style.width = `${percent}%`;
-  els.importStatus.textContent = progress.status || "unknown";
+  els.importStatus.textContent = importStatusLabel(progress.status);
   els.importPercent.textContent = `${percent}%`;
   els.importSpeed.textContent = `${formatBytes(progress.bytes_per_sec)}/s`;
   els.importEta.textContent = progress.eta_sec != null ? formatDuration(progress.eta_sec * 1000) : "--";
   els.importStatements.textContent = String(progress.statements_executed);
   els.importSkipped.textContent = String(progress.statements_skipped);
-  els.importPreview.textContent = progress.current_preview || progress.error || "";
+
+  const preview =
+    progress.status === "failed"
+      ? progress.error || progress.current_preview || ""
+      : progress.current_preview || "";
+  els.importPreview.textContent = preview;
+  updateImportBatchMeta();
+}
+
+function stopImportPolling() {
+  if (importPollTimer) {
+    clearInterval(importPollTimer);
+    importPollTimer = null;
+  }
+}
+
+function startImportPolling() {
+  stopImportPolling();
+  importPollTimer = setInterval(pollImportStatus, IMPORT_POLL_INTERVAL);
+  pollImportStatus();
+}
+
+function waitForImportJob() {
+  return new Promise((resolve, reject) => {
+    importCompleteWaiter = { resolve, reject };
+  });
+}
+
+function finishImportJob(progress, notify = true) {
+  if (importTerminalHandled) return;
+  importTerminalHandled = true;
+
+  stopImportPolling();
+  importPollInFlight = false;
+  setImportCancelButtonsDisabled(true);
+  importJobId = null;
+
+  const status = normalizeImportStatus(progress.status);
+  const fileName = progress.file_path ? progress.file_path.split(/[/\\]/).pop() : "SQL 文件";
+  let result = { status, progress };
+
+  if (status === "completed") {
+    const stmtText =
+      progress.statements_executed > 0
+        ? `，执行 ${progress.statements_executed} 条语句`
+        : "";
+    const batchPrefix =
+      importBatchRunning && importBatchContext
+        ? `[${importBatchContext.connectionName}] (${importBatchContext.index}/${importBatchContext.total}) `
+        : "";
+    if (notify) {
+      setStatus(`${batchPrefix}${fileName} 导入完成${stmtText}`, "ok");
+      showToast(`${batchPrefix}导入完成${stmtText}`);
+    }
+    result.ok = true;
+  } else if (status === "failed") {
+    const message = progress.error || `${fileName} 导入失败`;
+    if (notify) {
+      setStatus(message, "error");
+      showToast(message, false);
+    }
+    result.ok = false;
+    result.error = message;
+  } else {
+    if (notify) {
+      setStatus(`${fileName} 导入已取消`, "busy");
+      showToast("导入已取消");
+    }
+    result.ok = false;
+    result.error = "cancelled";
+  }
+
+  if (importCompleteWaiter) {
+    const waiter = importCompleteWaiter;
+    importCompleteWaiter = null;
+    if (result.ok) waiter.resolve(result);
+    else waiter.reject(new Error(result.error || "import failed"));
+  }
 }
 
 async function pollImportStatus() {
-  if (!importJobId) return;
+  if (!importJobId || importPollInFlight || importTerminalHandled) return;
+
+  const pollingJobId = importJobId;
+  importPollInFlight = true;
   try {
     const payload = await apiFetch(appState, "/api/mysql/import-file/status", {
       method: "POST",
-      body: JSON.stringify({ job_id: importJobId }),
+      body: JSON.stringify({ job_id: pollingJobId }),
     });
-    const progress = payload.data;
+    if (pollingJobId !== importJobId || importTerminalHandled) return;
+
+    const progress = normalizeImportProgress(payload.data);
     updateImportUi(progress);
 
-    if (["completed", "failed", "cancelled"].includes(progress.status)) {
-      clearInterval(importPollTimer);
-      importPollTimer = null;
-      $("cancelImportBtn").disabled = true;
-      importJobId = null;
-      if (progress.status === "completed") {
-        setStatus("SQL 文件导入完成", "ok");
-        showToast(`导入完成，执行 ${progress.statements_executed} 条语句`);
-      } else if (progress.status === "failed") {
-        setStatus(progress.error || "导入失败", "error");
-        showToast(progress.error || "导入失败", false);
-      } else {
-        setStatus("导入已取消", "busy");
-        showToast("导入已取消");
-      }
+    if (isImportTerminalStatus(progress.status)) {
+      finishImportJob(progress, !importBatchRunning);
     }
   } catch (err) {
-    clearInterval(importPollTimer);
-    importPollTimer = null;
-    setStatus(err.message, "error");
-    showToast(err.message, false);
+    if (importTerminalHandled || pollingJobId !== importJobId) return;
+    if (els.importStatus) els.importStatus.textContent = "轮询中断，重试中…";
+  } finally {
+    importPollInFlight = false;
   }
+}
+
+async function flushDatabaseConnection(conn, options = {}) {
+  if (!conn?.database) {
+    throw new Error(`连接「${conn?.name || "未知"}」未指定 database，无法清库`);
+  }
+
+  const confirmText = flushDbConfirmText(conn);
+  if (!options.skipConfirm) {
+    const ok = window.confirm(
+      `危险操作：将删除【${conn.name}】库中的全部表。\n\n${confirmText}\n\n确认清空？`
+    );
+    if (!ok) throw new Error("cancelled-by-user");
+  }
+
+  const payload = await apiFetch(
+    appState,
+    "/api/mysql/flush-db",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        target: connectionToTarget(conn),
+        confirm_text: confirmText,
+      }),
+    },
+    LONG_TIMEOUT
+  );
+  return payload.data || {};
 }
 
 async function flushDatabase() {
   const conn = getActiveConnection();
   if (!conn) return showToast("请选择连接", false);
-  if (!conn.database) return showToast("连接未指定 database，无法清库", false);
-
-  const confirmText = flushDbConfirmText(conn);
-  const ok = window.confirm(
-    `危险操作：将删除【${conn.name}】库中的全部表。\n\n${confirmText}\n\n确认清空？`
-  );
-  if (!ok) return showToast("已取消", false);
+  if (isBatchJobRunning()) return showToast("已有批量任务进行中", false);
 
   setStatus("清库中...", "busy");
   try {
-    const payload = await apiFetch(
-      appState,
-      "/api/mysql/flush-db",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          target: connectionToTarget(conn),
-          confirm_text: confirmText,
-        }),
-      },
-      LONG_TIMEOUT
-    );
-    const result = payload.data || {};
+    const result = await flushDatabaseConnection(conn);
     const tablesDropped = result.tables_dropped ?? result.tablesDropped ?? 0;
     const database = result.database || conn.database || "";
     setStatus(`清库完成 · 删除 ${tablesDropped} 张表`, "ok");
     showToast(`已清空 ${database}，删除 ${tablesDropped} 张表`);
   } catch (err) {
+    if (err.message === "cancelled-by-user") {
+      showToast("已取消", false);
+      return;
+    }
     setStatus(err.message, "error");
     showToast(err.message, false);
   }
+}
+
+function buildBatchFlushConfirmSummary(pairs) {
+  return pairs
+    .map((pair, index) => `${index + 1}. [${pair.connection.name}] ${pair.connection.database}`)
+    .join("\n");
+}
+
+function confirmBatchFlush(pairs) {
+  const summary = buildBatchFlushConfirmSummary(pairs);
+  return window.confirm(
+    `危险操作：将按顺序清空 ${pairs.length} 个分支的目标库（删除全部表）：\n\n${summary}\n\n确认批量清库？`
+  );
+}
+
+async function executeBatchFlushQueue(pairs) {
+  if (!pairs.length) return;
+
+  batchFlushQueue = [...pairs];
+  batchFlushRunning = true;
+  batchFlushAbort = false;
+  setBatchFlushCancelButtonsDisabled(false);
+
+  let successCount = 0;
+  const total = batchFlushQueue.length;
+
+  try {
+    while (batchFlushQueue.length) {
+      if (batchFlushAbort) break;
+
+      const current = batchFlushQueue[0];
+      batchFlushContext = {
+        index: total - batchFlushQueue.length + 1,
+        total,
+        connectionName: current.connection.name,
+        connectionId: current.connectionId,
+        database: current.connection.database,
+      };
+      updateFlushBatchMeta();
+      setStatus(`批量清库进行中：${batchFlushContext.index}/${total} · ${current.connection.name}`, "busy");
+
+      try {
+        const result = await flushDatabaseConnection(current.connection, { skipConfirm: true });
+        const tablesDropped = result.tables_dropped ?? result.tablesDropped ?? 0;
+        successCount += 1;
+        batchFlushQueue.shift();
+        setStatus(
+          `批量清库进行中：${successCount}/${total} · ${current.connection.name} 已删 ${tablesDropped} 张表`,
+          "busy"
+        );
+      } catch (err) {
+        if (err.message === "cancelled-by-user") break;
+        setStatus(`批量清库中断：${err.message}`, "error");
+        showToast(
+          `[${current.connection.name}] 第 ${batchFlushContext.index}/${total} 个分支失败：${err.message}`,
+          false
+        );
+        break;
+      }
+    }
+
+    if (batchFlushAbort) {
+      setStatus("批量清库已取消", "busy");
+      showToast("批量清库已取消");
+    } else if (successCount === total) {
+      setStatus(`批量清库完成，共 ${total} 个分支`, "ok");
+      showToast(`批量清库完成，共 ${total} 个分支`);
+    } else if (successCount > 0) {
+      setStatus(`批量清库部分完成：${successCount}/${total}`, "busy");
+      showToast(`批量清库部分完成：${successCount}/${total}`, false);
+    }
+  } finally {
+    batchFlushQueue = [];
+    batchFlushRunning = false;
+    batchFlushAbort = false;
+    batchFlushContext = null;
+    setBatchFlushCancelButtonsDisabled(true);
+    updateFlushBatchMeta();
+  }
+}
+
+async function startBatchFlush() {
+  if (isBatchJobRunning()) return showToast("已有任务进行中", false);
+
+  const pairs = readBatchFlushPairsFromUi();
+  if (!pairs.length) {
+    if (batchFlushConfig.enabled.length) {
+      return showToast("所选分支未配置 database，无法清库", false);
+    }
+    return showToast("请至少选择一个分支", false);
+  }
+
+  if (!confirmBatchFlush(pairs)) return showToast("已取消批量清库", false);
+
+  await saveFlushPresetToHistory({
+    enabled: pairs.map((pair) => pair.connectionId),
+  });
+
+  await executeBatchFlushQueue(pairs);
+}
+
+async function runBatchFlushFromHistory(entryId) {
+  if (isBatchJobRunning()) return showToast("已有任务进行中", false);
+
+  const entry = batchFlushHistory.find((item) => item.id === entryId);
+  if (!entry) return showToast("历史记录不存在", false);
+
+  const pairs = pairsFromBatchFlushPreset(entry);
+  if (!pairs.length) {
+    return showToast("历史记录中的分支已失效，请重新配置", false);
+  }
+
+  const missingCount = entry.enabled.length - pairs.length;
+  if (missingCount > 0) {
+    showToast(`部分分支已失效，将运行 ${pairs.length} 个`, false);
+  }
+
+  if (!confirmBatchFlush(pairs)) return showToast("已取消批量清库", false);
+
+  await saveFlushPresetToHistory({
+    enabled: pairs.map((pair) => pair.connectionId),
+  });
+
+  await executeBatchFlushQueue(pairs);
+}
+
+async function deleteBatchFlushHistoryEntry(entryId) {
+  batchFlushHistory = await deleteMysqlBatchFlushHistoryEntry(entryId);
+  renderBatchFlushHistory();
+  showToast("已删除历史记录");
+}
+
+async function cancelBatchFlush() {
+  if (batchFlushRunning) {
+    batchFlushAbort = true;
+    showToast("已请求取消批量清库");
+  }
+}
+
+async function startImportFile(filePath, options = {}) {
+  const conn = options.connection || getActiveConnection();
+  if (!conn || !filePath) {
+    throw new Error("请选择或填写 SQL 文件路径");
+  }
+  if (!conn.database) {
+    throw new Error(`连接「${conn.name}」未指定 database，无法导入`);
+  }
+
+  if (!options.skipConfirm) {
+    const ok = window.confirm(
+      `导入将执行 DROP/CREATE/INSERT 等语句，覆盖目标库。\n\n分支：${conn.name}\n库：${conn.database}\n文件：${filePath}\n\n确认导入？`
+    );
+    if (!ok) throw new Error("cancelled-by-user");
+  }
+
+  importTerminalHandled = false;
+  importCompleteWaiter = null;
+  stopImportPolling();
+  resetImportUi();
+
+  const fileName = filePath.split(/[/\\]/).pop();
+  setStatus(`正在启动导入：${conn.name} → ${fileName}`, "busy");
+  setImportCancelButtonsDisabled(false);
+
+  const confirmText = importConfirmText(conn, filePath);
+  const payload = await apiFetch(
+    appState,
+    "/api/mysql/import-file",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        target: connectionToTarget(conn),
+        file_path: filePath,
+        confirm_text: confirmText,
+      }),
+    },
+    LONG_TIMEOUT
+  );
+
+  const progress = normalizeImportProgress(payload.data);
+  importJobId = progress.job_id;
+  if (!importJobId) {
+    throw new Error("后端未返回 job_id，请确认后端已重新编译并重启");
+  }
+
+  updateImportUi(progress);
+  const waitPromise = waitForImportJob();
+  startImportPolling();
+  if (!options.quietStart) showToast("导入任务已启动");
+  return waitPromise;
 }
 
 async function startImport() {
-  const conn = getActiveConnection();
+  if (isBatchJobRunning()) return showToast("已有任务进行中", false);
+
   const filePath = getImportPath();
-  if (!conn || !filePath) return showToast("请选择或填写 SQL 文件路径", false);
+  if (!filePath) return showToast("请选择或填写 SQL 文件路径", false);
 
-  const confirmText = importConfirmText(conn, filePath);
-  const ok = window.confirm(`导入将执行 DROP/CREATE/INSERT 等语句，覆盖目标库。\n\n连接：${conn.name}\n文件：${filePath}\n\n确认导入？`);
-  if (!ok) return showToast("已取消导入", false);
-
-  setStatus("正在启动导入...", "busy");
-  $("cancelImportBtn").disabled = false;
   try {
-    const payload = await apiFetch(
-      appState,
-      "/api/mysql/import-file",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          target: connectionToTarget(conn),
-          file_path: filePath,
-          confirm_text: confirmText,
-        }),
-      },
-      LONG_TIMEOUT
-    );
-    const progress = normalizeImportProgress(payload.data);
-    importJobId = progress.job_id;
-    if (!importJobId) {
-      throw new Error("后端未返回 job_id，请确认后端已重新编译并重启");
-    }
-    updateImportUi(progress);
-    if (importPollTimer) clearInterval(importPollTimer);
-    importPollTimer = setInterval(pollImportStatus, IMPORT_POLL_INTERVAL);
-    pollImportStatus();
-    showToast("导入任务已启动");
+    await startImportFile(filePath);
   } catch (err) {
-    $("cancelImportBtn").disabled = true;
+    setImportCancelButtonsDisabled(true);
+    if (err.message === "cancelled-by-user") {
+      showToast("已取消导入", false);
+      return;
+    }
     setStatus(err.message, "error");
     showToast(err.message, false);
   }
 }
 
+function buildBatchImportConfirmSummary(pairs) {
+  return pairs
+    .map((pair, index) => {
+      const fileName = pair.filePath.split(/[/\\]/).pop();
+      return `${index + 1}. [${pair.connection.name}] ${pair.connection.database} ← ${fileName}`;
+    })
+    .join("\n");
+}
+
+function confirmBatchImport(pairs) {
+  const summary = buildBatchImportConfirmSummary(pairs);
+  return window.confirm(
+    `将按顺序导入 ${pairs.length} 组分支映射，每组覆盖对应目标库：\n\n${summary}\n\n确认批量导入？`
+  );
+}
+
+async function executeBatchImportQueue(pairs) {
+  if (!pairs.length) return;
+
+  importBatchQueue = [...pairs];
+  importBatchRunning = true;
+  importBatchAbort = false;
+  setImportCancelButtonsDisabled(false);
+
+  let successCount = 0;
+  const total = importBatchQueue.length;
+
+  try {
+    while (importBatchQueue.length) {
+      if (importBatchAbort) break;
+
+      const current = importBatchQueue[0];
+      importBatchContext = {
+        index: total - importBatchQueue.length + 1,
+        total,
+        filePath: current.filePath,
+        connectionName: current.connection.name,
+        connectionId: current.connectionId,
+      };
+      updateImportBatchMeta();
+
+      try {
+        await startImportFile(current.filePath, {
+          connection: current.connection,
+          skipConfirm: true,
+          quietStart: true,
+        });
+        successCount += 1;
+        importBatchQueue.shift();
+        setStatus(`批量导入进行中：${successCount}/${total}`, "busy");
+      } catch (err) {
+        if (err.message === "cancelled-by-user" || err.message === "cancelled") {
+          break;
+        }
+        setStatus(`批量导入中断：${err.message}`, "error");
+        showToast(
+          `[${current.connection.name}] 第 ${importBatchContext.index}/${total} 组失败：${err.message}`,
+          false
+        );
+        break;
+      }
+    }
+
+    if (importBatchAbort) {
+      setStatus("批量导入已取消", "busy");
+      showToast("批量导入已取消");
+    } else if (successCount === total) {
+      setStatus(`批量导入完成，共 ${total} 组分支映射`, "ok");
+      showToast(`批量导入完成，共 ${total} 组分支映射`);
+    } else if (successCount > 0) {
+      setStatus(`批量导入部分完成：${successCount}/${total}`, "busy");
+      showToast(`批量导入部分完成：${successCount}/${total}`, false);
+    }
+  } finally {
+    importBatchQueue = [];
+    importBatchRunning = false;
+    importBatchAbort = false;
+    importBatchContext = null;
+    setImportCancelButtonsDisabled(true);
+    updateImportBatchMeta();
+  }
+}
+
+async function startBatchImport() {
+  if (isBatchJobRunning()) return showToast("已有任务进行中", false);
+
+  const pairs = readBatchImportPairsFromUi();
+  if (!pairs.length) {
+    const missingSql = batchImportConfig.enabled.some((id) => getConnectionById(id) && !batchImportConfig.files[id]);
+    if (missingSql) return showToast("请为已选分支指定 SQL 文件", false);
+    return showToast("请选择至少一个分支并配置 SQL", false);
+  }
+
+  const invalid = pairs.find((pair) => !pair.connection.database);
+  if (invalid) {
+    return showToast(`分支「${invalid.connection.name}」未指定 database`, false);
+  }
+
+  if (!confirmBatchImport(pairs)) return showToast("已取消批量导入", false);
+
+  await savePresetToHistory({
+    enabled: pairs.map((pair) => pair.connectionId),
+    files: Object.fromEntries(pairs.map((pair) => [pair.connectionId, pair.filePath])),
+  });
+
+  await executeBatchImportQueue(pairs);
+}
+
+async function runBatchImportFromHistory(entryId) {
+  if (isBatchJobRunning()) return showToast("已有任务进行中", false);
+
+  const entry = batchImportHistory.find((item) => item.id === entryId);
+  if (!entry) return showToast("历史记录不存在", false);
+
+  const pairs = pairsFromBatchPreset(entry);
+  if (!pairs.length) {
+    return showToast("历史记录中的分支或 SQL 已失效，请重新配置", false);
+  }
+
+  const missingCount = entry.enabled.length - pairs.length;
+  if (missingCount > 0) {
+    showToast(`部分分支已失效，将运行 ${pairs.length} 组`, false);
+  }
+
+  if (!confirmBatchImport(pairs)) return showToast("已取消批量导入", false);
+
+  await savePresetToHistory({
+    enabled: pairs.map((pair) => pair.connectionId),
+    files: Object.fromEntries(pairs.map((pair) => [pair.connectionId, pair.filePath])),
+  });
+
+  await executeBatchImportQueue(pairs);
+}
+
+async function deleteBatchImportHistoryEntry(entryId) {
+  batchImportHistory = await deleteMysqlBatchImportHistoryEntry(entryId);
+  renderBatchImportHistory();
+  showToast("已删除历史记录");
+}
+
 async function cancelImport() {
-  if (!importJobId) return;
+  if (importBatchRunning) importBatchAbort = true;
+  if (!importJobId) {
+    if (importBatchRunning) showToast("已请求取消批量导入");
+    return;
+  }
+
   try {
     await apiFetch(appState, "/api/mysql/import-file/cancel", {
       method: "POST",
       body: JSON.stringify({ job_id: importJobId }),
     });
-    showToast("已请求取消");
+    showToast(importBatchRunning ? "已请求取消当前文件" : "已请求取消");
   } catch (err) {
     showToast(err.message, false);
   }
@@ -862,6 +1903,76 @@ function bindEvents() {
   els.importPathSelect?.addEventListener("change", renderConnections);
   els.importPath?.addEventListener("input", renderConnections);
   $("refreshSqlFilesBtn")?.addEventListener("click", loadSqlFiles);
+  $("refreshBatchSqlFilesBtn")?.addEventListener("click", loadSqlFiles);
+
+  els.batchComposeList?.addEventListener("change", async (event) => {
+    const checkbox = event.target.closest('input[type="checkbox"][data-batch-branch]');
+    if (checkbox) {
+      const row = checkbox.closest("[data-connection-id]");
+      const connectionId = row?.dataset.connectionId;
+      if (!connectionId) return;
+      setBatchBranchEnabled(connectionId, checkbox.checked);
+      row?.classList.toggle("is-checked", checkbox.checked);
+      await persistBatchImportConfig();
+      updateBatchSectionSummaries();
+      return;
+    }
+
+    const select = event.target.closest("select[data-batch-sql]");
+    if (!select) return;
+    const connectionId = select.closest("[data-connection-id]")?.dataset.connectionId;
+    if (!connectionId) return;
+    setBatchBranchFile(connectionId, select.value);
+    await persistBatchImportConfig();
+    updateBatchSectionSummaries();
+  });
+
+  els.batchImportHistoryList?.addEventListener("click", async (event) => {
+    const runBtn = event.target.closest("[data-batch-history-run]");
+    if (runBtn) {
+      event.preventDefault();
+      await runBatchImportFromHistory(runBtn.dataset.batchHistoryRun);
+      return;
+    }
+    const delBtn = event.target.closest("[data-batch-history-del]");
+    if (delBtn) {
+      event.preventDefault();
+      if (!window.confirm("确定删除这条导入历史？")) return;
+      await deleteBatchImportHistoryEntry(delBtn.dataset.batchHistoryDel);
+    }
+  });
+
+  $("toggleBatchComposeSection")?.addEventListener("click", () => toggleBatchSection("compose"));
+  $("toggleBatchHistorySection")?.addEventListener("click", () => toggleBatchSection("history"));
+  $("toggleBatchFlushComposeSection")?.addEventListener("click", () => toggleBatchFlushSection("compose"));
+  $("toggleBatchFlushHistorySection")?.addEventListener("click", () => toggleBatchFlushSection("history"));
+
+  els.batchFlushComposeList?.addEventListener("change", async (event) => {
+    const checkbox = event.target.closest('input[type="checkbox"][data-batch-flush-branch]');
+    if (!checkbox) return;
+    const row = checkbox.closest("[data-connection-id]");
+    const connectionId = row?.dataset.connectionId;
+    if (!connectionId) return;
+    setBatchFlushBranchEnabled(connectionId, checkbox.checked);
+    row?.classList.toggle("is-checked", checkbox.checked);
+    await persistBatchFlushConfig();
+    updateBatchFlushSectionSummaries();
+  });
+
+  els.batchFlushHistoryList?.addEventListener("click", async (event) => {
+    const runBtn = event.target.closest("[data-batch-flush-history-run]");
+    if (runBtn) {
+      event.preventDefault();
+      await runBatchFlushFromHistory(runBtn.dataset.batchFlushHistoryRun);
+      return;
+    }
+    const delBtn = event.target.closest("[data-batch-flush-history-del]");
+    if (delBtn) {
+      event.preventDefault();
+      if (!window.confirm("确定删除这条清库历史？")) return;
+      await deleteBatchFlushHistoryEntry(delBtn.dataset.batchFlushHistoryDel);
+    }
+  });
 
   $("runQueryBtn").addEventListener("click", runQuery);
   $("runExecuteBtn").addEventListener("click", runExecute);
@@ -888,7 +1999,33 @@ function bindEvents() {
     renderQueryTable();
   });
   $("startImportBtn").addEventListener("click", startImport);
+  $("startBatchImportBtn")?.addEventListener("click", startBatchImport);
+  $("startBatchFlushBtn")?.addEventListener("click", startBatchFlush);
+  $("selectAllBatchImportBtn")?.addEventListener("click", async () => {
+    const connections = appState?.settings?.mysqlConnections || [];
+    batchImportConfig.enabled = connections.filter((c) => c.database).map((c) => c.id);
+    await persistBatchImportConfig();
+    renderBatchImportUi();
+  });
+  $("clearBatchImportBtn")?.addEventListener("click", async () => {
+    batchImportConfig.enabled = [];
+    await persistBatchImportConfig();
+    renderBatchImportUi();
+  });
+  $("selectAllBatchFlushBtn")?.addEventListener("click", async () => {
+    const connections = appState?.settings?.mysqlConnections || [];
+    batchFlushConfig.enabled = connections.filter((c) => c.database).map((c) => c.id);
+    await persistBatchFlushConfig();
+    renderBatchFlushUi();
+  });
+  $("clearBatchFlushBtn")?.addEventListener("click", async () => {
+    batchFlushConfig.enabled = [];
+    await persistBatchFlushConfig();
+    renderBatchFlushUi();
+  });
   $("cancelImportBtn").addEventListener("click", cancelImport);
+  $("cancelBatchImportBtn")?.addEventListener("click", cancelImport);
+  $("cancelBatchFlushBtn")?.addEventListener("click", cancelBatchFlush);
   $("flushDbBtn")?.addEventListener("click", flushDatabase);
 
   document.addEventListener("keydown", (event) => {
@@ -904,11 +2041,18 @@ function bindEvents() {
 
 document.addEventListener("DOMContentLoaded", async () => {
   appState = await loadAppState();
+  await loadBatchImportConfig();
+  await loadBatchImportHistory();
+  await loadBatchFlushConfig();
+  await loadBatchFlushHistory();
   bindEvents();
   renderConnections();
   renderHistory();
+  renderBatchImportUi();
+  renderBatchFlushUi();
   seedQueryEditor();
   await loadSqlFiles();
+  updateImportProgressPanelVisibility(activeTab);
   setStatus("就绪");
 });
 })();

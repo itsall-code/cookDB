@@ -10,34 +10,15 @@
   <div class="wb-shell">
     <aside class="wb-sidebar">
       <div class="wb-brand">
-        <p class="eyebrow">Cook-DB Workbench</p>
+        <p class="eyebrow">Cook-DB · 数据联调</p>
         <h1>MySQL 工作台</h1>
-        <p>高性能 SQL 查询、执行与本地 dump 导入。大文件由后端流式解析，避免浏览器内存瓶颈。</p>
+        <p>查询、执行与 SQL 导入。大文件由后端流式解析，不经浏览器上传。</p>
       </div>
 
       <div class="wb-panel">
         <h3>当前连接</h3>
         <select id="connectionSelect" class="wb-connection-select"></select>
         <div id="connectionMeta" class="wb-connection-meta"></div>
-      </div>
-
-      <div class="wb-panel">
-        <h3>SQL 历史</h3>
-        <div class="wb-actions" style="margin-top:0;margin-bottom:8px;">
-          <label class="wb-checkbox">
-            <input id="historyFavoriteOnly" type="checkbox" />
-            仅收藏
-          </label>
-        </div>
-        <div id="historyList" class="wb-history-list"></div>
-      </div>
-
-      <div class="wb-panel">
-        <h3>清库</h3>
-        <div class="subtitle" style="color:#f87171;margin-bottom:10px;">
-          危险操作：删除当前连接所选数据库中的全部表，不可恢复。
-        </div>
-        <button type="button" class="danger" id="flushDbBtn" style="width:100%;">清空当前库</button>
       </div>
 
       <div class="wb-sidebar-footer">
@@ -50,7 +31,7 @@
       <div class="wb-topbar">
         <div>
           <h2>数据库操作中心</h2>
-          <div class="subtitle">查询结果前端分页排序；SQL 文件走后端流式导入与批量事务提交。</div>
+          <div class="subtitle">查询结果前端分页排序；SQL 文件走后端流式导入。</div>
         </div>
         <div id="statusPill" class="wb-status-pill">
           <span class="dot"></span>
@@ -58,12 +39,28 @@
         </div>
       </div>
 
+      <section class="wb-card wb-history-section">
+        <div class="wb-history-section-head">
+          <div>
+            <h3>SQL 历史</h3>
+            <p id="historyHint" class="wb-history-hint">执行查询后会自动记录 · 右键切换收藏</p>
+          </div>
+          <label class="wb-checkbox">
+            <input id="historyFavoriteOnly" type="checkbox" />
+            仅收藏
+          </label>
+        </div>
+        <div id="historyList" class="wb-history-list"></div>
+      </section>
+
       <section class="wb-card">
         <div class="wb-tabs">
           <button type="button" class="active" data-tab="query">查询</button>
           <button type="button" data-tab="lookup">单表查询</button>
           <button type="button" data-tab="execute">执行</button>
           <button type="button" data-tab="import">导入 SQL 文件</button>
+          <button type="button" data-tab="import-batch">批量导入</button>
+          <button type="button" data-tab="flush">清库</button>
         </div>
 
         <div id="tab-query" class="wb-tab-panel active">
@@ -134,56 +131,184 @@
         </div>
 
         <div id="tab-import" class="wb-tab-panel">
-          <div class="wb-import-grid">
-            <div class="wb-import-path">
-              <label for="importPathSelect">data 目录 SQL 脚本</label>
-              <div class="wb-import-path-row">
-                <select id="importPathSelect" class="wb-connection-select"></select>
-                <button type="button" class="secondary" id="refreshSqlFilesBtn">刷新</button>
+          <div class="wb-import-path">
+            <label for="importPathSelect">data 目录 SQL 脚本</label>
+            <div class="wb-import-path-row">
+              <select id="importPathSelect" class="wb-connection-select"></select>
+              <button type="button" class="secondary" id="refreshSqlFilesBtn">刷新</button>
+            </div>
+            <label for="importPath">自定义路径（留空则使用上方选择）</label>
+            <input id="importPath" type="text" placeholder="绝对路径或其它相对路径" />
+            <div class="subtitle">
+              导入到左侧栏当前选中的 MySQL 连接。1.4GB 级 dump 请勿通过浏览器上传，由 Rust 流式读取。
+            </div>
+            <div class="wb-actions">
+              <button type="button" class="primary" id="startImportBtn">开始导入</button>
+              <button type="button" class="danger" id="cancelImportBtn" disabled>取消导入</button>
+            </div>
+            <div id="importConfirmHint" class="subtitle"></div>
+          </div>
+        </div>
+
+        <div id="tab-import-batch" class="wb-tab-panel">
+          <div class="wb-ops-workbench">
+            <header class="wb-ops-header">
+              <p class="wb-ops-eyebrow">多环境 · 流式导入</p>
+              <h3 class="wb-ops-title">批量导入</h3>
+              <p class="wb-ops-desc">勾选分支并指定 SQL，按顺序覆盖目标库。配置自动保存，相同映射写入历史时会去重。</p>
+            </header>
+
+            <div class="wb-ops-actionbar">
+              <div class="wb-ops-actionbar-main">
+                <button type="button" class="primary" id="startBatchImportBtn">开始批量导入</button>
+                <button type="button" class="danger" id="cancelBatchImportBtn" disabled>取消</button>
               </div>
-              <label for="importPath">自定义路径（留空则使用上方选择）</label>
-              <input id="importPath" type="text" placeholder="绝对路径或其它相对路径" />
-              <div class="subtitle">
-                1.4GB 级 dump 请勿通过浏览器上传。填写后端可访问的路径，由 Rust 流式读取（1MB 缓冲 + 200 条/批事务）。
+              <div class="wb-ops-actionbar-meta">
+                <span id="batchImportSavedHint" class="wb-ops-saved-hint" hidden>配置已保存</span>
+                <span id="importBatchMeta" class="wb-ops-run-meta"></span>
               </div>
-              <div class="wb-actions">
-                <button type="button" class="primary" id="startImportBtn">开始导入</button>
-                <button type="button" class="danger" id="cancelImportBtn" disabled>取消导入</button>
-              </div>
-              <div id="importConfirmHint" class="subtitle"></div>
             </div>
 
-            <div class="wb-progress-card">
-              <h4>导入进度</h4>
-              <div class="wb-progress-bar"><span id="importProgressBar"></span></div>
-              <div class="wb-stat-grid">
-                <div class="wb-stat">
-                  <div class="label">状态</div>
-                  <div class="value" id="importStatus">idle</div>
+            <div class="wb-ops-sections">
+              <section class="wb-batch-section is-collapsed" id="batchComposeSection">
+                <div class="wb-batch-section-head">
+                  <button type="button" class="wb-batch-toggle" id="toggleBatchComposeSection" aria-expanded="false">
+                    <span class="wb-batch-chevron" aria-hidden="true"></span>
+                    <span class="wb-batch-toggle-text">
+                      <span class="wb-batch-toggle-title">分支与 SQL</span>
+                      <span id="batchComposeSummary" class="wb-batch-section-summary"></span>
+                    </span>
+                  </button>
+                  <div class="wb-batch-section-actions">
+                    <button type="button" class="secondary" id="selectAllBatchImportBtn">全选</button>
+                    <button type="button" class="secondary" id="clearBatchImportBtn">清空</button>
+                    <button type="button" class="secondary" id="refreshBatchSqlFilesBtn">刷新 SQL</button>
+                  </div>
                 </div>
-                <div class="wb-stat">
-                  <div class="label">进度</div>
-                  <div class="value" id="importPercent">0%</div>
+                <div id="batchComposeBody" class="wb-batch-section-body">
+                  <div id="batchComposeList" class="wb-batch-compose-list"></div>
                 </div>
-                <div class="wb-stat">
-                  <div class="label">速度</div>
-                  <div class="value" id="importSpeed">0 B/s</div>
+              </section>
+
+              <section class="wb-batch-section is-collapsed" id="batchHistorySection">
+                <div class="wb-batch-section-head">
+                  <button type="button" class="wb-batch-toggle" id="toggleBatchHistorySection" aria-expanded="false">
+                    <span class="wb-batch-chevron" aria-hidden="true"></span>
+                    <span class="wb-batch-toggle-text">
+                      <span class="wb-batch-toggle-title">导入历史</span>
+                      <span id="batchHistorySummary" class="wb-batch-section-summary"></span>
+                    </span>
+                  </button>
                 </div>
-                <div class="wb-stat">
-                  <div class="label">预计剩余</div>
-                  <div class="value" id="importEta">--</div>
+                <div id="batchHistoryBody" class="wb-batch-section-body">
+                  <div id="batchImportHistoryList" class="wb-batch-history-list"></div>
+                  <div id="batchHistoryEmptyHint" class="wb-batch-empty">暂无导入历史，完成一次批量导入后会自动记录</div>
                 </div>
-                <div class="wb-stat">
-                  <div class="label">已执行语句</div>
-                  <div class="value" id="importStatements">0</div>
-                </div>
-                <div class="wb-stat">
-                  <div class="label">已跳过</div>
-                  <div class="value" id="importSkipped">0</div>
-                </div>
-              </div>
-              <div id="importPreview" class="subtitle" style="margin-top:12px;color:#94a3b8;"></div>
+              </section>
             </div>
+          </div>
+        </div>
+
+        <div id="tab-flush" class="wb-tab-panel">
+          <div class="wb-ops-workbench wb-ops-workbench--danger">
+            <header class="wb-ops-header">
+              <p class="wb-ops-eyebrow">危险操作</p>
+              <h3 class="wb-ops-title">清库</h3>
+              <p class="wb-ops-desc">删除目标库中的全部表，不可恢复。可先清当前连接，或批量清空多个分支。</p>
+            </header>
+
+            <section class="wb-ops-card">
+              <div class="wb-ops-card-head">
+                <h4 class="wb-ops-card-title">当前连接</h4>
+                <p class="wb-ops-card-desc">清空上方所选 MySQL 连接的目标库</p>
+              </div>
+              <div id="flushSingleMeta" class="wb-ops-target-meta"></div>
+              <div class="wb-ops-card-actions">
+                <button type="button" class="danger" id="flushDbBtn">清空当前库</button>
+              </div>
+            </section>
+
+            <div class="wb-ops-actionbar">
+              <div class="wb-ops-actionbar-main">
+                <button type="button" class="danger" id="startBatchFlushBtn">开始批量清库</button>
+                <button type="button" class="secondary" id="cancelBatchFlushBtn" disabled>取消</button>
+              </div>
+              <div class="wb-ops-actionbar-meta">
+                <span id="batchFlushSavedHint" class="wb-ops-saved-hint" hidden>配置已保存</span>
+                <span id="flushBatchMeta" class="wb-ops-run-meta"></span>
+              </div>
+            </div>
+
+            <div class="wb-ops-sections">
+              <section class="wb-batch-section is-collapsed" id="batchFlushComposeSection">
+                <div class="wb-batch-section-head">
+                  <button type="button" class="wb-batch-toggle" id="toggleBatchFlushComposeSection" aria-expanded="false">
+                    <span class="wb-batch-chevron" aria-hidden="true"></span>
+                    <span class="wb-batch-toggle-text">
+                      <span class="wb-batch-toggle-title">分支选择</span>
+                      <span id="batchFlushComposeSummary" class="wb-batch-section-summary"></span>
+                    </span>
+                  </button>
+                  <div class="wb-batch-section-actions">
+                    <button type="button" class="secondary" id="selectAllBatchFlushBtn">全选</button>
+                    <button type="button" class="secondary" id="clearBatchFlushBtn">清空</button>
+                  </div>
+                </div>
+                <div id="batchFlushComposeBody" class="wb-batch-section-body">
+                  <div id="batchFlushComposeList" class="wb-batch-compose-list wb-batch-compose-list--flush"></div>
+                </div>
+              </section>
+
+              <section class="wb-batch-section is-collapsed" id="batchFlushHistorySection">
+                <div class="wb-batch-section-head">
+                  <button type="button" class="wb-batch-toggle" id="toggleBatchFlushHistorySection" aria-expanded="false">
+                    <span class="wb-batch-chevron" aria-hidden="true"></span>
+                    <span class="wb-batch-toggle-text">
+                      <span class="wb-batch-toggle-title">清库历史</span>
+                      <span id="batchFlushHistorySummary" class="wb-batch-section-summary"></span>
+                    </span>
+                  </button>
+                </div>
+                <div id="batchFlushHistoryBody" class="wb-batch-section-body">
+                  <div id="batchFlushHistoryList" class="wb-batch-history-list"></div>
+                  <div id="batchFlushHistoryEmptyHint" class="wb-batch-empty">暂无清库历史，完成一次批量清库后会自动记录</div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+
+        <div id="importProgressPanel" class="wb-import-progress-panel" hidden>
+          <div class="wb-progress-card">
+            <h4>导入进度</h4>
+            <div class="wb-progress-bar"><span id="importProgressBar"></span></div>
+            <div class="wb-stat-grid">
+              <div class="wb-stat">
+                <div class="label">状态</div>
+                <div class="value" id="importStatus">idle</div>
+              </div>
+              <div class="wb-stat">
+                <div class="label">进度</div>
+                <div class="value" id="importPercent">0%</div>
+              </div>
+              <div class="wb-stat">
+                <div class="label">速度</div>
+                <div class="value" id="importSpeed">0 B/s</div>
+              </div>
+              <div class="wb-stat">
+                <div class="label">预计剩余</div>
+                <div class="value" id="importEta">--</div>
+              </div>
+              <div class="wb-stat">
+                <div class="label">已执行语句</div>
+                <div class="value" id="importStatements">0</div>
+              </div>
+              <div class="wb-stat">
+                <div class="label">已跳过</div>
+                <div class="value" id="importSkipped">0</div>
+              </div>
+            </div>
+            <div id="importPreview" class="subtitle" style="margin-top:12px;color:#94a3b8;"></div>
           </div>
         </div>
       </section>

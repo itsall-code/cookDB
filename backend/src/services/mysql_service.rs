@@ -217,14 +217,14 @@ pub async fn query_rows(
     sql: &str,
     limit: Option<u32>,
 ) -> anyhow::Result<MySqlQueryResult> {
-    validate_select_sql(sql)?;
+    let sql = validate_select_sql(sql)?;
 
     let pool = create_pool(cfg, None).await?;
     let limit = limit.unwrap_or(200).clamp(1, 1000);
     info!(
         target = %mysql_target(cfg),
         limit,
-        sql_preview = %sql_preview(sql, 160),
+        sql_preview = %sql_preview(&sql, 160),
         "mysql query"
     );
     let sql = format!(
@@ -264,29 +264,29 @@ pub async fn execute_statement(
     sql: &str,
     allow_dangerous: bool,
 ) -> anyhow::Result<MySqlExecuteResult> {
-    validate_mutation_sql(sql, allow_dangerous)?;
+    let sql = validate_mutation_sql(sql, allow_dangerous)?;
 
-    if is_dangerous_mutation(sql) {
+    if is_dangerous_mutation(&sql) {
         warn!(
             target = %mysql_target(cfg),
             allow_dangerous,
-            sql_preview = %sql_preview(sql, 160),
+            sql_preview = %sql_preview(&sql, 160),
             "mysql dangerous execute"
         );
     } else {
         info!(
             target = %mysql_target(cfg),
-            sql_preview = %sql_preview(sql, 160),
+            sql_preview = %sql_preview(&sql, 160),
             "mysql execute"
         );
     }
 
     let pool = create_pool(cfg, None).await?;
-    let result = if needs_raw_sql(sql) {
+    let result = if needs_raw_sql(&sql) {
         let mut conn = connect_direct(cfg).await?;
-        conn.execute(sql).await?
+        conn.execute(sql.as_str()).await?
     } else {
-        sqlx::query(sql).execute(&pool).await?
+        sqlx::query(sql.as_str()).execute(&pool).await?
     };
 
     info!(
@@ -365,18 +365,27 @@ pub async fn flush_database(cfg: &MySqlConfig) -> anyhow::Result<MySqlFlushDbRes
     })
 }
 
-fn validate_select_sql(sql: &str) -> anyhow::Result<()> {
+fn normalize_single_sql(sql: &str) -> anyhow::Result<String> {
     let trimmed = sql.trim();
     if trimmed.is_empty() {
         bail!("sql cannot be empty");
     }
-    if trimmed.contains(';') {
+    let normalized = trimmed.trim_end_matches(';').trim();
+    if normalized.is_empty() {
+        bail!("sql cannot be empty");
+    }
+    if normalized.contains(';') {
         bail!("multiple statements are not allowed");
     }
-    if !trimmed.to_ascii_lowercase().starts_with("select") {
+    Ok(normalized.to_string())
+}
+
+fn validate_select_sql(sql: &str) -> anyhow::Result<String> {
+    let normalized = normalize_single_sql(sql)?;
+    if !normalized.to_ascii_lowercase().starts_with("select") {
         bail!("only SELECT statements are allowed for query");
     }
-    Ok(())
+    Ok(normalized)
 }
 
 const BLOCKED_MUTATIONS: &[&str] = &["delete", "truncate", "drop"];
@@ -395,16 +404,10 @@ pub fn is_dangerous_mutation(sql: &str) -> bool {
         .any(|prefix| lower.starts_with(prefix))
 }
 
-fn validate_mutation_sql(sql: &str, allow_dangerous: bool) -> anyhow::Result<()> {
-    let trimmed = sql.trim();
-    if trimmed.is_empty() {
-        bail!("sql cannot be empty");
-    }
-    if trimmed.contains(';') {
-        bail!("multiple statements are not allowed");
-    }
+fn validate_mutation_sql(sql: &str, allow_dangerous: bool) -> anyhow::Result<String> {
+    let normalized = normalize_single_sql(sql)?;
 
-    let lower = trimmed.to_ascii_lowercase();
+    let lower = normalized.to_ascii_lowercase();
     let allowed = [
         "insert", "update", "delete", "replace", "create", "alter", "drop", "truncate",
     ];
@@ -412,13 +415,13 @@ fn validate_mutation_sql(sql: &str, allow_dangerous: bool) -> anyhow::Result<()>
         bail!("only mutation or DDL statements are allowed for execute");
     }
 
-    if is_dangerous_mutation(trimmed) && !allow_dangerous {
+    if is_dangerous_mutation(&normalized) && !allow_dangerous {
         bail!(
             "dangerous statement blocked (DELETE/TRUNCATE/DROP). Set allow_dangerous=true and provide confirm_text to proceed"
         );
     }
 
-    Ok(())
+    Ok(normalized)
 }
 
 fn row_columns(row: &MySqlRow) -> Vec<String> {

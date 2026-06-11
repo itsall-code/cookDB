@@ -1,32 +1,45 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap");
+
 :root {
-  --font-sans: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
-  --font-mono: "Cascadia Code", "JetBrains Mono", Consolas, "Courier New", monospace;
+  --font-sans: "Plus Jakarta Sans", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "Cascadia Code", Consolas, monospace;
 
-  --bg: #eef2ff;
-  --surface: #ffffff;
-  --surface-2: #f8fafc;
-  --surface-code: #0b1222;
+  --bench-ink: #111318;
+  --bench-ink-2: #181c24;
+  --bench-paper: #f6f4ef;
+  --bench-paper-2: #eceae3;
+  --bench-surface: #fffcf7;
+  --bench-jade: #1a7f6a;
+  --bench-jade-dark: #146556;
+  --bench-jade-soft: #e3f0ec;
+  --bench-amber: #b7791f;
+  --bench-coral: #c0392b;
 
-  --text: #0f172a;
-  --text-2: #475569;
-  --text-muted: #64748b;
+  --bg: var(--bench-paper);
+  --surface: var(--bench-surface);
+  --surface-2: var(--bench-paper-2);
+  --surface-code: #141820;
 
-  --primary: #4f46e5;
-  --primary-700: #4338ca;
-  --accent: #06b6d4;
-  --success: #059669;
-  --danger: #dc2626;
-  --danger-700: #b91c1c;
-  --warning: #b45309;
+  --text: #1c1f26;
+  --text-2: #3d4450;
+  --text-muted: #5a6270;
 
-  --border: #e2e8f0;
-  --border-strong: #cbd5e1;
-  --ring: rgba(79, 70, 229, 0.35);
+  --primary: var(--bench-jade);
+  --primary-700: var(--bench-jade-dark);
+  --accent: #6ec4ae;
+  --success: var(--bench-jade);
+  --danger: var(--bench-coral);
+  --danger-700: #a93226;
+  --warning: var(--bench-amber);
+
+  --border: rgba(28, 31, 38, 0.12);
+  --border-strong: rgba(28, 31, 38, 0.18);
+  --ring: rgba(26, 127, 106, 0.22);
 
   --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 16px;
-  --r-xl: 20px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 16px;
   --r-pill: 999px;
 
   --s-1: 4px;
@@ -36,12 +49,12 @@
   --s-5: 20px;
   --s-6: 24px;
 
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 10px 28px rgba(15, 23, 42, 0.08);
-  --shadow-lg: 0 24px 60px rgba(15, 23, 42, 0.14);
+  --shadow-sm: 0 1px 3px rgba(17, 19, 24, 0.06);
+  --shadow-md: 0 8px 24px rgba(17, 19, 24, 0.07);
+  --shadow-lg: 0 16px 40px rgba(17, 19, 24, 0.1);
 
   --dur: 180ms;
-  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 * {
@@ -71,7 +84,7 @@ body {
   flex-direction: column;
   height: 100%;
   width: 100%;
-  background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 34%, #f1f5f9 100%);
+  background: var(--bench-paper);
 }
 
 .popup-header {
@@ -81,9 +94,8 @@ body {
   justify-content: space-between;
   gap: var(--s-3);
   padding: var(--s-4) var(--s-4) var(--s-3);
-  background: rgba(255, 255, 255, 0.78);
+  background: var(--bench-surface);
   border-bottom: 1px solid var(--border);
-  backdrop-filter: blur(10px);
 }
 
 .popup-header h1 {
@@ -98,9 +110,8 @@ body {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: rgba(248, 250, 252, 0.95);
+  background: var(--bench-paper-2);
   padding: var(--s-3) var(--s-4);
-  backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
 }
 
@@ -122,24 +133,24 @@ body {
   font-size: 12px;
   padding: var(--s-2) 10px;
   border-radius: var(--r-sm);
-  background: #eef2ff;
-  color: #3730a3;
+  background: var(--bench-jade-soft);
+  color: var(--bench-jade-dark);
   word-break: break-word;
   margin-top: 6px;
   line-height: 1.4;
-  border: 1px solid rgba(79, 70, 229, 0.16);
+  border: 1px solid rgba(26, 127, 106, 0.18);
 }
 
 .status.ok {
-  background: #ecfdf5;
-  color: #065f46;
-  border-color: rgba(5, 150, 105, 0.22);
+  background: var(--bench-jade-soft);
+  color: var(--bench-jade-dark);
+  border-color: rgba(26, 127, 106, 0.22);
 }
 
 .status.error {
-  background: #fef2f2;
-  color: #991b1b;
-  border-color: rgba(220, 38, 38, 0.22);
+  background: #fceceb;
+  color: #922b21;
+  border-color: rgba(192, 57, 43, 0.22);
 }
 
 .log {
@@ -328,19 +339,20 @@ select {
 
 button {
   border: none;
-  padding: 11px 12px;
+  min-height: 44px;
+  padding: 0 14px;
   cursor: pointer;
-  background: linear-gradient(135deg, var(--primary), #2563eb);
+  background: var(--bench-jade);
   color: white;
   font-weight: 600;
   transition: transform 0.08s var(--ease), box-shadow var(--dur) var(--ease),
-    opacity var(--dur) var(--ease), filter var(--dur) var(--ease);
-  box-shadow: var(--shadow-sm);
+    opacity var(--dur) var(--ease), background var(--dur) var(--ease);
+  box-shadow: 0 2px 0 var(--bench-jade-dark);
 }
 
 button:hover {
-  filter: brightness(1.05);
-  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.28);
+  background: #1f9179;
+  box-shadow: 0 4px 12px rgba(26, 127, 106, 0.24);
 }
 
 button:active {
@@ -348,23 +360,25 @@ button:active {
 }
 
 button.secondary {
-  background: #e2e8f0;
-  color: #0f172a;
+  background: var(--bench-paper-2);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
   box-shadow: none;
 }
 
 button.secondary:hover {
-  filter: none;
-  background: #d8dee9;
-  box-shadow: var(--shadow-sm);
+  background: #e4e1d9;
+  box-shadow: none;
 }
 
 button.danger {
-  background: linear-gradient(135deg, var(--danger), var(--danger-700));
+  background: var(--bench-coral);
+  box-shadow: none;
 }
 
 button.danger:hover {
-  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.28);
+  background: #a93226;
+  box-shadow: 0 4px 12px rgba(192, 57, 43, 0.2);
 }
 
 button:disabled {
@@ -507,10 +521,10 @@ button:focus-visible {
 
 .eyebrow {
   margin: 0 0 var(--s-1);
-  color: var(--primary);
-  font-size: 11px;
+  color: var(--bench-jade);
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
@@ -534,7 +548,7 @@ button:focus-visible {
 }
 
 .text-link:hover {
-  background: rgba(79, 70, 229, 0.08);
+  background: rgba(26, 127, 106, 0.08);
 }
 
 .env-summary {
@@ -545,9 +559,9 @@ button:focus-visible {
 
 .env-summary span {
   display: block;
-  border: 1px solid #dbeafe;
-  background: #eff6ff;
-  color: #1e3a8a;
+  border: 1px solid rgba(26, 127, 106, 0.18);
+  background: var(--bench-jade-soft);
+  color: var(--bench-jade-dark);
   border-radius: var(--r-md);
   padding: 7px 9px;
   font-size: 12px;
@@ -589,8 +603,8 @@ button:focus-visible {
 }
 
 .field-chip:hover {
-  background: #273449;
-  border-color: rgba(129, 140, 248, 0.5);
+  background: #1e2838;
+  border-color: rgba(110, 196, 174, 0.45);
 }
 
 .viewer-title {
@@ -690,15 +704,15 @@ button:focus-visible {
   display: flex;
   gap: 6px;
   padding: 10px 14px 0;
-  background: rgba(255, 255, 255, 0.66);
+  background: var(--bench-paper-2);
   border-bottom: 1px solid var(--border);
-  backdrop-filter: blur(10px);
   z-index: 19;
 }
 
 .app-tabs button {
   width: auto;
   flex: 1;
+  min-height: 44px;
   background: transparent;
   color: var(--text-muted);
   font-weight: 700;
@@ -709,16 +723,14 @@ button:focus-visible {
 }
 
 .app-tabs button:hover {
-  filter: none;
-  box-shadow: none;
-  background: rgba(79, 70, 229, 0.07);
+  background: rgba(26, 127, 106, 0.07);
   color: var(--text);
 }
 
 .app-tabs button.active {
-  color: var(--primary);
+  color: var(--bench-jade-dark);
   background: var(--surface);
-  box-shadow: inset 0 -2px 0 var(--primary);
+  box-shadow: inset 0 -3px 0 var(--bench-jade);
 }
 
 .app-tabs button {
@@ -821,6 +833,66 @@ button:focus-visible {
 
 #tab-app-mysql .wb-actions {
   margin-top: var(--s-3);
+}
+
+#tab-app-mysql .wb-history-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--s-4);
+  margin-bottom: var(--s-3);
+}
+
+#tab-app-mysql .wb-history-section .section-heading h2 {
+  font-size: 15px;
+  margin: 0;
+}
+
+#tab-app-mysql .wb-history-list {
+  max-height: 220px;
+}
+
+#tab-app-mysql .wb-history-hint {
+  margin-bottom: var(--s-2);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+#tab-app-mysql .wb-history-sql {
+  font-size: 13px;
+  max-height: 96px;
+}
+
+#tab-app-mysql .wb-history-conn {
+  font-size: 13px;
+}
+
+#tab-app-mysql .wb-ops-actionbar {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+#tab-app-mysql .wb-ops-workbench--danger .wb-ops-actionbar {
+  border-color: rgba(192, 57, 43, 0.2);
+  background: rgba(192, 57, 43, 0.04);
+}
+
+#tab-app-mysql .wb-ops-target-meta {
+  background: #fff;
+  border-color: var(--border);
+  color: var(--text-2);
+}
+
+#tab-app-mysql .wb-ops-title {
+  font-size: 16px;
+}
+
+#tab-app-mysql .wb-ops-desc {
+  font-size: 12px;
+}
+
+#tab-app-mysql .wb-ops-run-meta {
+  font-size: 11px;
 }
 
 #tab-app-mysql .wb-status-pill {
