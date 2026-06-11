@@ -6,23 +6,36 @@
   <title>CookDB 设置</title>
   <link rel="stylesheet" href="style.css" />
 </head>
-<body>
-  <div class="page">
-    <div class="options-header">
-      <p class="eyebrow">Cook-DB 控制台</p>
-      <h1>插件设置</h1>
-      <div class="small">环境与 Redis、MySQL 命名连接分开管理；底部保存按钮会一并写入当前环境与正在编辑的连接。</div>
-    </div>
+<body class="options-body">
+  <div class="page settings-page">
+    <header class="options-hero">
+      <div class="options-hero__copy">
+        <p class="eyebrow">Cook-DB 控制台</p>
+        <h1>联调环境总控台</h1>
+        <div class="small">把后端 API、Redis 源/目标库、MySQL 命名连接和本地化规则集中到一个可审阅的操作台；保存前请确认目标库不是生产环境。</div>
+      </div>
+      <div class="options-hero__panel" aria-label="配置安全提示">
+        <span class="hero-chip">LOCAL FIRST</span>
+        <strong>危险操作前置审阅</strong>
+        <span>备份、清库、DDL 与导入均依赖这里的连接配置。</span>
+      </div>
+    </header>
+
+    <section class="ops-strip" aria-label="配置流程">
+      <div><span>01</span><strong>选环境</strong><small>dev / qa / local</small></div>
+      <div><span>02</span><strong>配双 Redis</strong><small>source → target</small></div>
+      <div><span>03</span><strong>绑定 MySQL</strong><small>查询 / 导入 / 清库</small></div>
+    </section>
 
     <div class="app-tabs" role="tablist">
-      <button type="button" class="active" data-app-tab="redis" role="tab">环境 / Redis</button>
-      <button type="button" data-app-tab="mysql" role="tab">MySQL 连接</button>
+      <button type="button" class="active" data-app-tab="redis" role="tab" aria-selected="true">环境 / Redis</button>
+      <button type="button" data-app-tab="mysql" role="tab" aria-selected="false">MySQL 连接</button>
     </div>
 
     <!-- ========================= 环境 / Redis ========================= -->
     <div id="tab-app-redis" class="app-tab-panel active">
-      <div class="section">
-        <h2>环境管理</h2>
+      <section class="section settings-card settings-card--env">
+        <div class="section-heading"><div><p class="eyebrow">Environment</p><h2>环境管理</h2></div><span class="config-badge">必选</span></div>
         <div class="row">
           <div class="col">
             <label for="envSelect">当前环境</label>
@@ -40,35 +53,35 @@
           <div class="col"><button id="importBtn" class="secondary" type="button">导入配置</button></div>
         </div>
         <input id="importFile" type="file" accept="application/json" style="display:none;" />
-      </div>
+      </section>
 
-      <div class="section">
-        <h2>后端接口</h2>
+      <section class="section settings-card settings-card--api">
+        <div class="section-heading"><div><p class="eyebrow">Backend</p><h2>后端接口</h2></div><span class="config-badge config-badge--soft">HTTP API</span></div>
         <div class="row"><div class="col"><label for="apiBase">API Base URL</label><input id="apiBase" type="text" /></div></div>
-      </div>
+      </section>
 
-      <div class="section">
-        <h2>源 Redis</h2>
+      <section class="section settings-card settings-card--redis settings-card--source">
+        <div class="section-heading"><div><p class="eyebrow">Redis Source</p><h2>源 Redis</h2></div><span class="config-badge config-badge--source">读取</span></div>
         <div class="row">
           <div class="col"><label for="sourceHost">Host</label><input id="sourceHost" type="text" /></div>
           <div class="col"><label for="sourcePort">Port</label><input id="sourcePort" type="number" /></div>
           <div class="col"><label for="sourceDb">DB</label><input id="sourceDb" type="number" /></div>
         </div>
         <div class="row"><div class="col"><label for="sourcePassword">Password</label><input id="sourcePassword" type="text" placeholder="留空表示 null" /></div></div>
-      </div>
+      </section>
 
-      <div class="section">
-        <h2>目标 Redis</h2>
+      <section class="section settings-card settings-card--redis settings-card--target">
+        <div class="section-heading"><div><p class="eyebrow">Redis Target</p><h2>目标 Redis</h2></div><span class="config-badge config-badge--danger">写入</span></div>
         <div class="row">
           <div class="col"><label for="targetHost">Host</label><input id="targetHost" type="text" /></div>
           <div class="col"><label for="targetPort">Port</label><input id="targetPort" type="number" /></div>
           <div class="col"><label for="targetDb">DB</label><input id="targetDb" type="number" /></div>
         </div>
         <div class="row"><div class="col"><label for="targetPassword">Password</label><input id="targetPassword" type="text" placeholder="留空表示 null" /></div></div>
-      </div>
+      </section>
 
-      <div class="section">
-        <h2>本地化配置</h2>
+      <section class="section settings-card settings-card--localize">
+        <div class="section-heading"><div><p class="eyebrow">Account Rewrite</p><h2>本地化配置</h2></div><span class="config-badge">规则</span></div>
         <div class="row">
           <div class="col"><label for="platform">Platform</label><input id="platform" type="text" /></div>
           <div class="col"><label for="group">Group</label><input id="group" type="text" /></div>
@@ -78,19 +91,19 @@
           <div class="col"><label for="preLogin">Pre Login</label><input id="preLogin" type="text" /></div>
         </div>
         <div class="row"><div class="col"><label for="defaultHashName">Default Hash Name</label><input id="defaultHashName" type="text" /></div></div>
-      </div>
+      </section>
 
-      <div class="section">
-        <h2>默认删除配置</h2>
+      <section class="section settings-card settings-card--danger-zone">
+        <div class="section-heading"><div><p class="eyebrow">Delete Defaults</p><h2>默认删除配置</h2></div><span class="config-badge config-badge--danger">高风险</span></div>
         <div class="row"><div class="col"><label for="defaultTables">默认 tables（每行一个）</label><textarea id="defaultTables"></textarea></div></div>
         <div class="row"><div class="col"><label for="defaultDeleteKeys">默认 keys（每行一个）</label><textarea id="defaultDeleteKeys"></textarea></div></div>
-      </div>
+      </section>
     </div>
 
     <!-- ========================= MySQL 连接 ========================= -->
     <div id="tab-app-mysql" class="app-tab-panel">
-      <div class="section">
-        <h2>MySQL 连接库</h2>
+      <section class="section settings-card settings-card--mysql">
+        <div class="section-heading"><div><p class="eyebrow">MySQL Library</p><h2>MySQL 连接库</h2></div><span class="config-badge config-badge--soft">命名连接</span></div>
         <div class="small">命名连接供 MySQL 工作台使用，可保存 dev / test / staging / local 等多个实例。当前编辑的连接会随保存写入当前环境。</div>
         <div class="row">
           <div class="col">
@@ -119,7 +132,7 @@
         <div class="mysql-links">
           <a href="mysql.html" target="_blank" rel="noopener noreferrer">打开 MySQL 工作台 ↗</a>
         </div>
-      </div>
+      </section>
     </div>
 
     <div class="options-footer">
@@ -127,7 +140,7 @@
         <button id="saveBtn" type="button">保存设置</button>
         <button id="testHealthBtn" class="secondary" type="button">测试后端健康检查</button>
       </div>
-      <div id="status" class="status">等待操作</div>
+      <div id="status" class="status" aria-live="polite">等待操作</div>
     </div>
   </div>
   <script src="shared.js"></script>

@@ -800,7 +800,9 @@ async function flushDb() {
 
 function setAppTab(tab) {
   document.querySelectorAll(".app-tabs button").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.appTab === tab);
+    const selected = btn.dataset.appTab === tab;
+    btn.classList.toggle("active", selected);
+    btn.setAttribute("aria-selected", selected ? "true" : "false");
   });
   document.querySelectorAll(".app-tab-panel").forEach((panel) => {
     panel.classList.toggle("active", panel.id === `tab-app-${tab}`);
