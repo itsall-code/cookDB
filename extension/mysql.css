@@ -573,43 +573,51 @@ body {
   font-weight: 600;
   font-family: var(--wb-font);
   cursor: pointer;
-  transition: transform 0.1s var(--wb-ease), box-shadow 0.18s var(--wb-ease), background 0.18s var(--wb-ease);
+  transition: border-color 0.18s var(--wb-ease), background 0.18s var(--wb-ease),
+    color 0.18s var(--wb-ease), opacity 0.18s var(--wb-ease);
+  box-shadow: none;
 }
 
-.wb-card button:active {
-  transform: translateY(1px);
+.wb-card button.primary:active {
+  background: var(--bench-jade-dark);
 }
 
 button.primary {
   background: var(--bench-jade);
   color: #fff;
-  box-shadow: 0 2px 0 var(--bench-jade-dark);
+  border: 1px solid var(--bench-jade);
+  box-shadow: none;
 }
 
 button.primary:hover {
-  background: #1f9179;
-  box-shadow: 0 4px 12px rgba(26, 127, 106, 0.28);
+  background: var(--bench-jade-dark);
+  border-color: var(--bench-jade-dark);
+  box-shadow: none;
 }
 
 button.secondary {
-  background: var(--bench-paper-2);
+  background: #fff;
   color: var(--bench-text);
   border: 1px solid var(--wb-border);
+  box-shadow: none;
 }
 
 button.secondary:hover {
-  background: #e4e1d9;
-  border-color: var(--bench-line-strong);
+  background: var(--bench-paper-2);
+  border-color: rgba(28, 31, 38, 0.28);
 }
 
 button.danger {
-  background: var(--bench-coral);
+  background: #b83228;
   color: #fff;
+  border: 1px solid #b83228;
+  box-shadow: none;
 }
 
 button.danger:hover {
-  background: #a93226;
-  box-shadow: 0 4px 12px rgba(192, 57, 43, 0.22);
+  background: #922b21;
+  border-color: #922b21;
+  box-shadow: none;
 }
 
 .wb-card button:disabled,
