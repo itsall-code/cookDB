@@ -336,47 +336,53 @@ select {
 }
 
 button {
-  border: none;
+  border: 1px solid transparent;
   min-height: 44px;
   padding: 0 14px;
   cursor: pointer;
   background: var(--bench-jade);
-  color: white;
+  color: #fff;
   font-weight: 600;
-  transition: transform 0.08s var(--ease), box-shadow var(--dur) var(--ease),
-    opacity var(--dur) var(--ease), background var(--dur) var(--ease);
-  box-shadow: 0 2px 0 var(--bench-jade-dark);
+  letter-spacing: 0;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease),
+    color var(--dur) var(--ease), opacity var(--dur) var(--ease);
+  box-shadow: none;
 }
 
 button:hover {
-  background: #1f9179;
-  box-shadow: 0 4px 12px rgba(26, 127, 106, 0.24);
+  background: var(--bench-jade-dark);
+  border-color: var(--bench-jade-dark);
+  box-shadow: none;
 }
 
 button:active {
-  transform: translateY(1px);
+  background: var(--bench-jade-dark);
 }
 
 button.secondary {
-  background: var(--bench-paper-2);
+  background: #fff;
   color: var(--text);
   border: 1px solid var(--border-strong);
   box-shadow: none;
 }
 
 button.secondary:hover {
-  background: #e4e1d9;
+  background: var(--bench-paper-2);
+  border-color: rgba(28, 31, 38, 0.28);
   box-shadow: none;
 }
 
 button.danger {
-  background: var(--bench-coral);
+  background: #b83228;
+  color: #fff;
+  border-color: #b83228;
   box-shadow: none;
 }
 
 button.danger:hover {
-  background: #a93226;
-  box-shadow: 0 4px 12px rgba(192, 57, 43, 0.2);
+  background: #922b21;
+  border-color: #922b21;
+  box-shadow: none;
 }
 
 button:disabled {
@@ -742,7 +748,7 @@ button:focus-visible {
 
 .app-tabs button.dragging {
   opacity: 0.55;
-  box-shadow: 0 8px 18px rgba(79, 70, 229, 0.3);
+  box-shadow: none;
   cursor: grabbing;
 }
 
@@ -1100,17 +1106,23 @@ button {
 }
 
 button:not(.secondary):not(.danger) {
-  background: linear-gradient(180deg, #17846f, var(--bench-jade-dark));
+  background: var(--bench-jade);
+  border-color: var(--bench-jade);
+  color: #fff;
+}
+
+button:not(.secondary):not(.danger):hover {
+  background: var(--bench-jade-dark);
+  border-color: var(--bench-jade-dark);
 }
 
 button.secondary {
-  background: rgba(255, 250, 241, 0.72);
+  background: #fff;
 }
 
 button.danger {
-  background:
-    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0 8px, transparent 8px 16px),
-    var(--bench-coral);
+  background: #b83228;
+  border-color: #b83228;
 }
 
 .options-body {
