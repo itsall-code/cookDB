@@ -1,41 +1,46 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap");
 
 :root {
-  /* Cook Bench — DB ops workbench palette */
-  --bench-ink: #111318;
-  --bench-ink-2: #181c24;
-  --bench-ink-3: #222832;
-  --bench-paper: #f6f4ef;
-  --bench-paper-2: #eceae3;
-  --bench-surface: #fffcf7;
-  --bench-jade: #1a7f6a;
-  --bench-jade-dark: #146556;
-  --bench-jade-soft: #e3f0ec;
-  --bench-amber: #b7791f;
-  --bench-coral: #c0392b;
-  --bench-text: #1c1f26;
-  --bench-muted: #5a6270;
-  --bench-line: rgba(28, 31, 38, 0.1);
-  --bench-line-strong: rgba(28, 31, 38, 0.16);
+  /* Cook-DB · HashiCorp-inspired tokens (awesome-design-md) */
+  --hc-canvas: #0f1117;
+  --hc-surface-1: #15181e;
+  --hc-surface-2: #1f232b;
+  --hc-surface-3: #2a2f3a;
+  --hc-ink: #f4f6f8;
+  --hc-ink-muted: #b2b6bd;
+  --hc-ink-subtle: #656a76;
+  --hc-hairline: rgba(178, 182, 189, 0.12);
+  --hc-hairline-strong: rgba(178, 182, 189, 0.2);
+  --hc-paper: #f4f5f7;
+  --hc-paper-2: #e8eaef;
+  --hc-surface-light: #ffffff;
 
-  --wb-bg: var(--bench-paper);
-  --wb-sidebar: var(--bench-ink);
-  --wb-sidebar-border: rgba(255, 255, 255, 0.07);
-  --wb-surface: var(--bench-surface);
-  --wb-surface-2: var(--bench-paper-2);
-  --wb-border: var(--bench-line-strong);
-  --wb-text: var(--bench-text);
-  --wb-muted: var(--bench-muted);
-  --wb-accent: var(--bench-jade);
-  --wb-accent-2: var(--bench-jade-dark);
-  --wb-success: var(--bench-jade);
-  --wb-danger: var(--bench-coral);
-  --wb-warning: var(--bench-amber);
-  --wb-shadow: 0 16px 40px rgba(17, 19, 24, 0.08);
-  --wb-shadow-sm: 0 2px 8px rgba(17, 19, 24, 0.06);
-  --wb-radius: 14px;
-  --wb-radius-sm: 10px;
-  --wb-font: "Plus Jakarta Sans", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --product-redis: #dc382d;
+  --product-redis-deep: #b52e25;
+  --product-redis-soft: rgba(220, 56, 45, 0.1);
+  --product-mysql: #00758f;
+  --product-mysql-deep: #005a6e;
+  --product-mysql-soft: rgba(0, 117, 143, 0.1);
+  --product-backend: #00ca8e;
+
+  --wb-bg: var(--hc-paper);
+  --wb-sidebar: var(--hc-canvas);
+  --wb-sidebar-border: var(--hc-hairline);
+  --wb-surface: var(--hc-surface-light);
+  --wb-surface-2: var(--hc-paper-2);
+  --wb-border: rgba(17, 19, 24, 0.12);
+  --wb-text: #111318;
+  --wb-muted: #5a6270;
+  --wb-accent: var(--product-mysql);
+  --wb-accent-2: var(--product-mysql-deep);
+  --wb-success: var(--product-backend);
+  --wb-danger: #e62b1e;
+  --wb-warning: #bb5a00;
+  --wb-shadow: none;
+  --wb-shadow-sm: none;
+  --wb-radius: 12px;
+  --wb-radius-sm: 8px;
+  --wb-font: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   --wb-mono: "IBM Plex Mono", "Cascadia Code", Consolas, monospace;
   --wb-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --wb-rail: 3px;
@@ -52,9 +57,7 @@ body {
   font-family: var(--wb-font);
   font-size: 14px;
   line-height: 1.5;
-  background:
-    radial-gradient(ellipse 80% 50% at 0% 0%, rgba(26, 127, 106, 0.07), transparent 50%),
-    var(--bench-paper);
+  background: var(--hc-paper);
   color: var(--wb-text);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -68,10 +71,8 @@ body {
 
 /* —— Sidebar —— */
 .wb-sidebar {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 40%),
-    var(--bench-ink);
-  color: #d8dde6;
+  background: var(--hc-surface-1);
+  color: var(--hc-ink-muted);
   border-right: 1px solid var(--wb-sidebar-border);
   display: flex;
   flex-direction: column;
@@ -86,10 +87,10 @@ body {
 
 .wb-brand .eyebrow {
   margin: 0 0 8px;
-  color: #6ec4ae;
+  color: var(--product-mysql);
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -99,29 +100,30 @@ body {
   font-weight: 700;
   line-height: 1.25;
   letter-spacing: -0.02em;
-  color: #f4f6f8;
+  color: var(--hc-ink);
 }
 
 .wb-brand p {
   margin: 10px 0 0;
   font-size: 12px;
-  color: #8b95a5;
+  color: var(--hc-ink-subtle);
   line-height: 1.55;
 }
 
 .wb-panel {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--wb-sidebar-border);
+  background: var(--hc-surface-2);
+  border: 1px solid var(--hc-hairline);
   border-radius: var(--wb-radius-sm);
   padding: 12px;
+  border-left: 3px solid var(--product-mysql);
 }
 
 .wb-panel h3 {
   margin: 0 0 10px;
   font-size: 10px;
-  font-weight: 700;
-  color: #7a8494;
-  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--hc-ink-subtle);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -130,9 +132,9 @@ body {
 .wb-sidebar input {
   width: 100%;
   min-height: 40px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: var(--bench-ink-2);
-  color: #eef1f5;
+  border: 1px solid var(--hc-hairline);
+  background: var(--hc-surface-3);
+  color: var(--hc-ink);
   border-radius: var(--wb-radius-sm);
   padding: 9px 11px;
   font-size: 13px;
@@ -370,9 +372,9 @@ body {
 }
 
 .wb-sidebar-footer a:hover {
-  background: rgba(26, 127, 106, 0.14);
-  border-color: rgba(110, 196, 174, 0.35);
-  color: #fff;
+  background: var(--product-mysql-soft);
+  border-color: rgba(0, 117, 143, 0.35);
+  color: var(--hc-ink);
 }
 
 /* —— Main —— */
@@ -395,7 +397,7 @@ body {
   font-size: 26px;
   font-weight: 700;
   letter-spacing: -0.03em;
-  color: var(--bench-text);
+  color: var(--wb-text);
 }
 
 .wb-topbar .subtitle,
@@ -413,7 +415,7 @@ body {
   min-height: 36px;
   padding: 0 14px;
   border-radius: 999px;
-  background: var(--bench-surface);
+  background: var(--wb-surface);
   border: 1px solid var(--wb-border);
   box-shadow: var(--wb-shadow-sm);
   font-size: 12px;
@@ -431,17 +433,17 @@ body {
 }
 
 .wb-status-pill.ok .dot {
-  background: var(--bench-jade);
-  box-shadow: 0 0 0 3px rgba(26, 127, 106, 0.2);
+  background: var(--product-backend);
+  box-shadow: 0 0 0 3px rgba(0, 202, 142, 0.2);
 }
 
 .wb-status-pill.error .dot {
-  background: var(--bench-coral);
+  background: var(--wb-danger);
   box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.18);
 }
 
 .wb-status-pill.busy .dot {
-  background: var(--bench-amber);
+  background: var(--wb-warning);
   animation: wb-pulse 1.4s ease-in-out infinite;
 }
 
@@ -457,11 +459,12 @@ body {
 
 /* —— Card & tabs —— */
 .wb-card {
-  background: var(--bench-surface);
+  background: var(--wb-surface);
   border: 1px solid var(--wb-border);
   border-radius: var(--wb-radius);
   box-shadow: var(--wb-shadow);
   overflow: hidden;
+  border-top: 3px solid var(--product-mysql);
 }
 
 .wb-tabs {
@@ -470,7 +473,7 @@ body {
   gap: 4px;
   padding: 10px 12px 0;
   border-bottom: 1px solid var(--wb-border);
-  background: var(--bench-paper-2);
+  background: var(--hc-paper-2);
 }
 
 .wb-tabs button {
@@ -491,13 +494,13 @@ body {
 
 .wb-tabs button:hover {
   color: var(--wb-text);
-  background: rgba(26, 127, 106, 0.06);
+  background: var(--product-mysql-soft);
 }
 
 .wb-tabs button.active {
-  color: var(--bench-jade-dark);
-  background: var(--bench-surface);
-  box-shadow: inset 0 var(--wb-rail) 0 var(--bench-jade);
+  color: var(--product-mysql-deep);
+  background: var(--wb-surface);
+  box-shadow: inset 0 var(--wb-rail) 0 var(--product-mysql);
 }
 
 .wb-tab-panel {
@@ -511,11 +514,11 @@ body {
 
 /* —— Editor —— */
 .wb-editor-wrap {
-  border: 1px solid #2a3140;
+  border: 1px solid var(--hc-hairline);
   border-radius: var(--wb-radius-sm);
   overflow: hidden;
-  background: #141820;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  background: var(--hc-surface-1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .wb-editor-toolbar {
@@ -540,8 +543,8 @@ body {
   min-height: 180px;
   border: none;
   resize: vertical;
-  background: #141820;
-  color: #c8d4e0;
+  background: var(--hc-canvas);
+  color: var(--hc-ink-muted);
   padding: 14px 16px;
   font-family: var(--wb-mono);
   font-size: 13px;
@@ -579,32 +582,32 @@ body {
 }
 
 .wb-card button.primary:active {
-  background: var(--bench-jade-dark);
+  background: var(--product-mysql-deep);
 }
 
 button.primary {
-  background: var(--bench-jade);
+  background: var(--product-mysql);
   color: #fff;
-  border: 1px solid var(--bench-jade);
+  border: 1px solid var(--product-mysql);
   box-shadow: none;
 }
 
 button.primary:hover {
-  background: var(--bench-jade-dark);
-  border-color: var(--bench-jade-dark);
+  background: var(--product-mysql-deep);
+  border-color: var(--product-mysql-deep);
   box-shadow: none;
 }
 
 button.secondary {
   background: #fff;
-  color: var(--bench-text);
+  color: var(--wb-text);
   border: 1px solid var(--wb-border);
   box-shadow: none;
 }
 
 button.secondary:hover {
-  background: var(--bench-paper-2);
-  border-color: rgba(28, 31, 38, 0.28);
+  background: var(--hc-paper-2);
+  border-color: rgba(17, 19, 24, 0.24);
 }
 
 button.danger {
@@ -642,7 +645,7 @@ button:disabled {
 .wb-checkbox input {
   width: 16px;
   height: 16px;
-  accent-color: var(--bench-jade);
+  accent-color: var(--product-mysql);
   cursor: pointer;
 }
 
@@ -660,8 +663,8 @@ button:disabled {
   gap: 6px;
   padding: 5px 10px;
   border-radius: 999px;
-  background: var(--bench-jade-soft);
-  color: var(--bench-jade-dark);
+  background: var(--product-mysql-soft);
+  color: var(--product-mysql-deep);
   font-size: 12px;
   font-weight: 600;
 }
@@ -688,7 +691,7 @@ button:disabled {
 .wb-table th,
 .wb-table td {
   padding: 11px 14px;
-  border-bottom: 1px solid var(--bench-paper-2);
+  border-bottom: 1px solid var(--hc-paper-2);
   text-align: left;
   white-space: nowrap;
 }
@@ -696,8 +699,8 @@ button:disabled {
 .wb-table th {
   position: sticky;
   top: 0;
-  background: var(--bench-paper-2);
-  color: var(--bench-muted);
+  background: var(--hc-paper-2);
+  color: var(--wb-muted);
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
@@ -707,7 +710,7 @@ button:disabled {
 }
 
 .wb-table tr:hover td {
-  background: rgba(26, 127, 106, 0.04);
+  background: var(--product-mysql-soft);
 }
 
 .wb-table td.copyable {
@@ -732,7 +735,7 @@ button:disabled {
 .wb-import-path > label {
   font-size: 12px;
   font-weight: 600;
-  color: var(--bench-muted);
+  color: var(--wb-muted);
   letter-spacing: 0.02em;
 }
 
@@ -753,7 +756,7 @@ button:disabled {
   font-family: var(--wb-mono);
   font-size: 13px;
   background: #fff;
-  color: var(--bench-text);
+  color: var(--wb-text);
   transition: border-color 0.18s var(--wb-ease), box-shadow 0.18s var(--wb-ease);
 }
 
@@ -766,7 +769,7 @@ button:disabled {
   font-family: var(--wb-mono);
   font-size: 13px;
   background: #fff;
-  color: var(--bench-text);
+  color: var(--wb-text);
 }
 
 .wb-import-batch-panel {
@@ -787,14 +790,14 @@ button:disabled {
 .wb-ops-eyebrow {
   margin: 0 0 6px;
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--bench-jade);
+  color: var(--product-mysql);
 }
 
 .wb-ops-workbench--danger .wb-ops-eyebrow {
-  color: var(--bench-coral);
+  color: var(--wb-danger);
 }
 
 .wb-ops-title {
@@ -809,7 +812,7 @@ button:disabled {
   margin: 6px 0 0;
   font-size: 13px;
   line-height: 1.55;
-  color: var(--bench-muted);
+  color: var(--wb-muted);
 }
 
 .wb-ops-actionbar {
@@ -821,7 +824,7 @@ button:disabled {
   padding: 12px 14px;
   border: 1px solid var(--wb-border);
   border-radius: var(--wb-radius-sm);
-  background: var(--bench-paper-2);
+  background: var(--hc-paper-2);
 }
 
 .wb-ops-workbench--danger .wb-ops-actionbar {
@@ -852,7 +855,7 @@ button:disabled {
 .wb-ops-saved-hint {
   font-size: 12px;
   font-weight: 600;
-  color: var(--bench-jade);
+  color: var(--product-backend);
 }
 
 .wb-ops-saved-hint[hidden] {
@@ -862,7 +865,7 @@ button:disabled {
 .wb-ops-run-meta {
   font-size: 12px;
   line-height: 1.45;
-  color: var(--bench-muted);
+  color: var(--wb-muted);
   text-align: right;
 }
 
@@ -892,7 +895,7 @@ button:disabled {
 .wb-ops-card-desc {
   margin: 4px 0 0;
   font-size: 12px;
-  color: var(--bench-muted);
+  color: var(--wb-muted);
 }
 
 .wb-ops-target-meta {
@@ -900,10 +903,10 @@ button:disabled {
   padding: 10px 12px;
   border-radius: var(--wb-radius-sm);
   border: 1px solid var(--wb-border);
-  background: var(--bench-surface);
+  background: var(--wb-surface);
   font-size: 13px;
   line-height: 1.55;
-  color: var(--bench-muted);
+  color: var(--wb-muted);
 }
 
 .wb-ops-target-meta div + div {
@@ -917,7 +920,7 @@ button:disabled {
 
 .wb-batch-lead {
   margin: 0;
-  color: var(--bench-muted);
+  color: var(--wb-muted);
   font-size: 13px;
 }
 
@@ -948,11 +951,11 @@ button:disabled {
 }
 
 .wb-batch-compose-head {
-  background: var(--bench-paper-2);
+  background: var(--hc-paper-2);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
-  color: var(--bench-muted);
+  color: var(--wb-muted);
 }
 
 .wb-batch-compose-row:last-child {
@@ -985,7 +988,7 @@ button:disabled {
   display: block;
   font-style: normal;
   font-size: 12px;
-  color: var(--bench-muted);
+  color: var(--wb-muted);
 }
 
 .wb-batch-compose-col--sql select {
@@ -998,7 +1001,7 @@ button:disabled {
 }
 
 .wb-batch-lead--danger {
-  color: var(--bench-coral);
+  color: var(--wb-danger);
   font-weight: 600;
 }
 
@@ -1033,7 +1036,7 @@ button:disabled {
 .wb-batch-history-meta {
   margin-top: 4px;
   font-size: 12px;
-  color: var(--bench-muted);
+  color: var(--wb-muted);
 }
 
 .wb-batch-history-actions {
@@ -1074,7 +1077,7 @@ button:disabled {
   justify-content: space-between;
   gap: 10px;
   padding: 10px 12px;
-  background: var(--bench-paper-2);
+  background: var(--hc-paper-2);
   border-bottom: 1px solid var(--wb-border);
   min-width: 0;
 }
@@ -1115,7 +1118,7 @@ button:disabled {
 }
 
 .wb-batch-toggle:focus-visible {
-  outline: 2px solid var(--bench-jade);
+  outline: 2px solid var(--product-mysql);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -1155,13 +1158,13 @@ button:disabled {
 .wb-batch-toggle-title {
   font-size: 13px;
   font-weight: 700;
-  color: var(--bench-text);
+  color: var(--wb-text);
 }
 
 .wb-batch-section-summary {
   font-size: 12px;
   font-weight: 500;
-  color: var(--bench-muted);
+  color: var(--wb-muted);
   padding: 2px 8px;
   border-radius: 999px;
   background: rgba(28, 31, 38, 0.06);
@@ -1174,8 +1177,8 @@ button:disabled {
 .wb-batch-chevron {
   width: 8px;
   height: 8px;
-  border-right: 2px solid var(--bench-muted);
-  border-bottom: 2px solid var(--bench-muted);
+  border-right: 2px solid var(--wb-muted);
+  border-bottom: 2px solid var(--wb-muted);
   transform: rotate(45deg);
   transition: transform 0.18s var(--wb-ease);
   flex-shrink: 0;
@@ -1206,7 +1209,7 @@ button:disabled {
   margin: 0;
   font-size: 13px;
   font-weight: 700;
-  color: var(--bench-text);
+  color: var(--wb-text);
 }
 
 .wb-pick-list {
@@ -1232,11 +1235,11 @@ button:disabled {
 }
 
 .wb-pick-item:hover:not(.is-disabled) {
-  background: var(--bench-paper-2);
+  background: var(--hc-paper-2);
 }
 
 .wb-pick-item.is-checked {
-  background: var(--bench-jade-soft);
+  background: var(--product-mysql-soft);
 }
 
 .wb-pick-item.is-disabled {
@@ -1249,7 +1252,7 @@ button:disabled {
   height: 16px;
   margin-top: 2px;
   flex-shrink: 0;
-  accent-color: var(--bench-jade);
+  accent-color: var(--product-mysql);
   cursor: pointer;
 }
 
@@ -1265,13 +1268,13 @@ button:disabled {
 
 .wb-pick-item-body strong {
   font-size: 14px;
-  color: var(--bench-text);
+  color: var(--wb-text);
 }
 
 .wb-pick-item-body em {
   font-style: normal;
   font-size: 12px;
-  color: var(--bench-muted);
+  color: var(--wb-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1304,7 +1307,7 @@ button:disabled {
 
 .wb-batch-assign-label span {
   font-size: 12px;
-  color: var(--bench-muted);
+  color: var(--wb-muted);
   font-family: var(--wb-mono);
 }
 
@@ -1313,10 +1316,10 @@ button:disabled {
   text-align: center;
   font-size: 13px;
   line-height: 1.5;
-  color: var(--bench-muted);
+  color: var(--wb-muted);
   border: 1px dashed var(--wb-border);
   border-radius: var(--wb-radius-sm);
-  background: var(--bench-paper);
+  background: var(--hc-paper);
 }
 
 .wb-batch-empty[hidden] {
@@ -1340,7 +1343,7 @@ button:disabled {
 .wb-batch-saved-hint {
   font-size: 12px;
   font-weight: 600;
-  color: var(--bench-jade-dark);
+  color: var(--product-mysql-deep);
 }
 
 .wb-batch-saved-hint[hidden] {
@@ -1358,11 +1361,11 @@ button:disabled {
 }
 
 .wb-progress-card {
-  background: var(--bench-ink-2);
-  color: #dce3ec;
+  background: var(--hc-surface-1);
+  color: var(--hc-ink-muted);
   border-radius: var(--wb-radius);
   padding: 18px 20px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--hc-hairline);
   box-shadow: var(--wb-shadow);
   position: relative;
   overflow: hidden;
@@ -1375,7 +1378,7 @@ button:disabled {
   left: 0;
   right: 0;
   height: var(--wb-rail);
-  background: linear-gradient(90deg, var(--bench-jade), #6ec4ae);
+  background: linear-gradient(90deg, var(--product-mysql), var(--product-backend));
 }
 
 .wb-progress-card h4 {
@@ -1400,7 +1403,7 @@ button:disabled {
   height: 100%;
   width: 0;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--bench-jade), #6ec4ae);
+  background: linear-gradient(90deg, var(--product-mysql), var(--product-backend));
   transition: width 0.28s var(--wb-ease);
 }
 
@@ -1449,9 +1452,10 @@ button:disabled {
   max-width: 400px;
   padding: 14px 16px;
   border-radius: var(--wb-radius-sm);
-  background: var(--bench-ink);
-  color: #eef1f5;
-  box-shadow: 0 20px 48px rgba(17, 19, 24, 0.32);
+  background: var(--hc-surface-1);
+  color: var(--hc-ink);
+  border: 1px solid var(--hc-hairline);
+  box-shadow: none;
   font-size: 13px;
   font-weight: 500;
   opacity: 0;
@@ -1467,11 +1471,11 @@ button:disabled {
 }
 
 .wb-toast.ok {
-  border-left: var(--wb-rail) solid var(--bench-jade);
+  border-left: var(--wb-rail) solid var(--product-backend);
 }
 
 .wb-toast.error {
-  border-left: var(--wb-rail) solid var(--bench-coral);
+  border-left: var(--wb-rail) solid var(--wb-danger);
 }
 
 /* —— Pagination & lookup —— */
@@ -1490,7 +1494,7 @@ button:disabled {
 
 .lookup-hint {
   margin-bottom: 14px;
-  color: var(--bench-muted);
+  color: var(--wb-muted);
   font-size: 13px;
 }
 
@@ -1504,7 +1508,7 @@ button:disabled {
   display: block;
   font-size: 12px;
   font-weight: 600;
-  color: var(--bench-muted);
+  color: var(--wb-muted);
   margin-bottom: 6px;
 }
 
@@ -1527,7 +1531,7 @@ button:disabled {
   padding: 14px;
   border-radius: var(--wb-radius-sm);
   border: 1px solid var(--wb-border);
-  background: var(--bench-paper-2);
+  background: var(--hc-paper-2);
 }
 
 .wb-lookup-value {
@@ -1544,8 +1548,8 @@ button:disabled {
 }
 
 .wb-lookup-value:hover {
-  border-color: rgba(26, 127, 106, 0.45);
-  background: var(--bench-jade-soft);
+  border-color: rgba(0, 117, 143, 0.45);
+  background: var(--product-mysql-soft);
 }
 
 /* —— Focus —— */
@@ -1556,13 +1560,13 @@ button:disabled {
 .wb-editor:focus,
 .lookup-field input:focus,
 .lookup-field select:focus {
-  border-color: rgba(26, 127, 106, 0.65);
-  box-shadow: 0 0 0 3px rgba(26, 127, 106, 0.18);
+  border-color: rgba(0, 117, 143, 0.65);
+  box-shadow: 0 0 0 3px var(--product-mysql-soft);
   outline: none;
 }
 
 :focus-visible {
-  outline: 2px solid var(--bench-jade);
+  outline: 2px solid var(--product-mysql);
   outline-offset: 2px;
 }
 

@@ -41,9 +41,10 @@
     <main class="popup-scroll" id="popupScroll">
       <!-- ========================= Redis 面板 ========================= -->
       <div id="tab-app-redis" class="app-tab-panel active">
-        <div class="section snap-section">
+        <div class="section settings-card settings-card--env snap-section">
           <div class="section-heading">
             <div>
+              <p class="eyebrow">Environment</p>
               <h2>当前环境</h2>
               <div class="small">切换前请先在系统设置中保存 Redis、MySQL 与后端地址。</div>
             </div>
@@ -60,7 +61,8 @@
           <div id="envSummary" class="env-summary" aria-live="polite"></div>
         </div>
 
-        <div class="section snap-section">
+        <div class="section settings-card snap-section">
+          <p class="eyebrow">Connectivity</p>
           <h2>1. 测试数据库连接</h2>
           <div class="small">先连通后端 API，再验证所选数据库配置是否可用。</div>
           <div class="row">
@@ -76,7 +78,8 @@
           <button id="testRedisBtn" type="button">测试连接</button>
         </div>
 
-        <div class="section snap-section">
+        <div class="section settings-card snap-section">
+          <p class="eyebrow">Data Sync</p>
           <h2>2. 备份数据库</h2>
           <div class="warning-box">源库 → 目标库，会覆盖目标库。执行前会弹出确认。</div>
           <button id="backupBtn" type="button">执行备份</button>
@@ -241,7 +244,8 @@
           </div>
         </div>
 
-        <div class="section snap-section">
+        <div class="section settings-card settings-card--danger-zone section--danger snap-section">
+          <p class="eyebrow">Danger Zone</p>
           <h2>7. 清空目标 DB</h2>
           <div class="warning-box">危险操作：清空目标 DB，需要输入完整后端确认码。</div>
           <button id="flushBtn" class="danger" type="button">清空目标 DB</button>
