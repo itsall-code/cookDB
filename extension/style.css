@@ -1250,3 +1250,207 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+/* ===== Qt desktop UI refresh ===== */
+:root {
+  --qt-window: #e7ebf1;
+  --qt-window-dark: #d5dbe4;
+  --qt-panel: #f7f8fa;
+  --qt-panel-raised: #ffffff;
+  --qt-titlebar: #24364c;
+  --qt-titlebar-2: #31465f;
+  --qt-text: #1f2937;
+  --qt-muted: #5f6b7a;
+  --qt-border: #aeb8c5;
+  --qt-border-soft: #cbd3dd;
+  --qt-highlight: #2f80d1;
+  --qt-highlight-deep: #1f65a6;
+  --qt-focus: rgba(47, 128, 209, 0.26);
+  --qt-shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.78);
+
+  --bg: var(--qt-window);
+  --surface: var(--qt-panel-raised);
+  --surface-2: var(--qt-window-dark);
+  --text: var(--qt-text);
+  --text-2: #334155;
+  --text-muted: var(--qt-muted);
+  --primary: var(--qt-highlight);
+  --primary-700: var(--qt-highlight-deep);
+  --border: var(--qt-border-soft);
+  --border-strong: var(--qt-border);
+  --ring: var(--qt-focus);
+  --r-md: 5px;
+  --r-lg: 7px;
+  --r-xl: 9px;
+  --shadow-sm: 0 1px 1px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 6px 14px rgba(15, 23, 42, 0.12);
+}
+
+.popup-shell,
+.options-body,
+.popup-scroll,
+.page .app-tab-panel.active {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.54), transparent 180px),
+    var(--qt-window);
+}
+
+.popup-header,
+.options-hero,
+.options-footer {
+  background: linear-gradient(180deg, var(--qt-titlebar-2), var(--qt-titlebar));
+  border-color: #162335;
+  box-shadow: var(--qt-shadow-inset), 0 1px 2px rgba(15, 23, 42, 0.22);
+}
+
+.popup-header::before,
+.options-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(255,255,255,0.12), transparent 34%);
+}
+
+.popup-header {
+  position: relative;
+  padding: 12px 14px 10px;
+}
+
+.brand-mark {
+  border-radius: 6px;
+  border-color: rgba(255, 255, 255, 0.22);
+  background:
+    linear-gradient(135deg, rgba(65, 186, 109, 0.9), rgba(47, 128, 209, 0.72)),
+    #25364a;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 1px 2px rgba(0,0,0,0.22);
+}
+
+.app-tabs,
+.page .app-tabs,
+.log-panel {
+  background: linear-gradient(180deg, #eef2f7, #d8dee8);
+  border-color: var(--qt-border);
+}
+
+.app-tabs button,
+#tab-app-mysql .wb-tabs button {
+  border: 1px solid var(--qt-border);
+  border-bottom-color: #9ba7b5;
+  background: linear-gradient(180deg, #fdfefe, #d7dde7);
+  color: #405066;
+  box-shadow: var(--qt-shadow-inset);
+  cursor: pointer;
+}
+
+.app-tabs button.active,
+.page .app-tabs button.active,
+#tab-app-mysql .wb-tabs button.active {
+  color: #122033;
+  background: linear-gradient(180deg, #ffffff, #f2f5f9);
+  border-bottom-color: #f2f5f9;
+  box-shadow: inset 0 3px 0 var(--qt-highlight), var(--qt-shadow-inset);
+}
+
+.section,
+.settings-card,
+#tab-app-mysql .wb-history-section,
+.options-hero__panel,
+.ops-strip div {
+  background: linear-gradient(180deg, var(--qt-panel-raised), #eef2f6);
+  border-color: var(--qt-border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--qt-shadow-inset), var(--shadow-sm);
+}
+
+.section::before,
+.settings-card::before,
+.popup-hero::before {
+  width: 1px;
+  background: var(--qt-border);
+  opacity: 1;
+}
+
+.section::after,
+.settings-card::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 26px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.78), rgba(255,255,255,0));
+  pointer-events: none;
+}
+
+.popup-hero {
+  border-color: var(--qt-border);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.2), transparent),
+    linear-gradient(135deg, #334b66, #1f2d40);
+  box-shadow: var(--qt-shadow-inset), var(--shadow-md);
+}
+
+.popup-hero__flow span,
+.config-badge,
+.hero-chip,
+.status,
+.env-summary span,
+.viewer,
+.field-chip {
+  border-radius: var(--r-md);
+  box-shadow: var(--qt-shadow-inset);
+}
+
+input,
+textarea,
+select,
+#tab-app-mysql .wb-connection-select,
+.wb-connection-select {
+  border-color: var(--qt-border);
+  border-radius: 4px;
+  background: linear-gradient(180deg, #ffffff, #f0f3f7);
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08), 0 1px 0 rgba(255,255,255,0.8);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--qt-highlight);
+  box-shadow: 0 0 0 3px var(--qt-focus), inset 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+button,
+button.secondary,
+#tab-app-redis button:not(.secondary):not(.danger):not(.small-btn):not(.wb-batch-toggle),
+#tab-app-mysql .wb-actions button.primary,
+#tab-app-mysql .wb-import-path .wb-actions button.primary,
+#tab-app-mysql .wb-ops-actionbar-main button.primary,
+#tab-app-mysql .wb-editor-toolbar button.secondary,
+#tab-app-mysql > .section > .wb-tabs ~ .wb-tab-panel .wb-actions button.primary {
+  color: #102033;
+  border-color: #8fa0b5;
+  background: linear-gradient(180deg, #ffffff, #d8e0ea);
+  box-shadow: var(--qt-shadow-inset), 0 1px 1px rgba(15, 23, 42, 0.1);
+}
+
+button:hover,
+button.secondary:hover,
+#tab-app-redis button:not(.secondary):not(.danger):not(.small-btn):not(.wb-batch-toggle):hover,
+#tab-app-mysql .wb-actions button.primary:hover,
+#tab-app-mysql .wb-import-path .wb-actions button.primary:hover,
+#tab-app-mysql .wb-ops-actionbar-main button.primary:hover {
+  color: #07111f;
+  border-color: var(--qt-highlight-deep);
+  background: linear-gradient(180deg, #f8fbff, #c8d8ea);
+}
+
+button.danger {
+  color: #fff;
+  border-color: #a5281e;
+  background: linear-gradient(180deg, #ef6258, #c0392b);
+}
+
+.warning-box {
+  background: linear-gradient(180deg, #fff8e8, #f5e9c9);
+  border-color: #c6a45e;
+  box-shadow: var(--qt-shadow-inset);
+}
