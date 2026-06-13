@@ -1788,3 +1788,94 @@ button.wb-batch-toggle:active {
     grid-template-columns: 1fr;
   }
 }
+
+/* ===== Qt desktop workbench refresh ===== */
+:root {
+  --qt-window: #e7ebf1;
+  --qt-panel: #f7f8fa;
+  --qt-panel-raised: #ffffff;
+  --qt-titlebar: #24364c;
+  --qt-titlebar-2: #31465f;
+  --qt-border: #aeb8c5;
+  --qt-border-soft: #cbd3dd;
+  --qt-highlight: #2f80d1;
+  --qt-highlight-deep: #1f65a6;
+  --qt-focus: rgba(47, 128, 209, 0.26);
+
+  --wb-bg: var(--qt-window);
+  --wb-sidebar: var(--qt-titlebar);
+  --wb-surface: var(--qt-panel-raised);
+  --wb-surface-2: #d8dee8;
+  --wb-border: var(--qt-border);
+  --wb-accent: var(--qt-highlight);
+  --wb-accent-2: var(--qt-highlight-deep);
+  --wb-radius: 7px;
+  --wb-radius-sm: 5px;
+  --wb-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+  --wb-shadow-sm: 0 1px 1px rgba(15, 23, 42, 0.08);
+}
+
+html,
+body,
+.wb-main {
+  background: linear-gradient(180deg, rgba(255,255,255,0.52), transparent 220px), var(--qt-window);
+}
+
+.wb-sidebar {
+  background: linear-gradient(180deg, var(--qt-titlebar-2), var(--qt-titlebar));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.16);
+}
+
+.wb-panel,
+.wb-card,
+.wb-history-section,
+.wb-ops-card,
+.wb-batch-section,
+.wb-editor-wrap,
+.wb-table-wrap {
+  border-color: var(--qt-border);
+  border-radius: var(--wb-radius);
+  background: linear-gradient(180deg, var(--qt-panel-raised), #eef2f6);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.78), var(--wb-shadow-sm);
+}
+
+.wb-sidebar select,
+.wb-sidebar input,
+.wb-connection-select,
+input,
+textarea,
+select {
+  border-color: var(--qt-border);
+  border-radius: 4px;
+  background: linear-gradient(180deg, #ffffff, #f0f3f7);
+  color: #1f2937;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08), 0 1px 0 rgba(255,255,255,0.8);
+}
+
+.wb-sidebar select,
+.wb-sidebar input {
+  background: linear-gradient(180deg, #405774, #2b3f58);
+  color: #f8fafc;
+}
+
+button,
+.wb-actions button.primary,
+button.secondary {
+  color: #102033;
+  border-color: #8fa0b5;
+  background: linear-gradient(180deg, #ffffff, #d8e0ea);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.78), 0 1px 1px rgba(15, 23, 42, 0.1);
+}
+
+button:hover,
+.wb-actions button.primary:hover,
+button.secondary:hover {
+  border-color: var(--qt-highlight-deep);
+  background: linear-gradient(180deg, #f8fbff, #c8d8ea);
+}
+
+button.danger {
+  color: #fff;
+  border-color: #a5281e;
+  background: linear-gradient(180deg, #ef6258, #c0392b);
+}
