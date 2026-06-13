@@ -11,8 +11,7 @@
     "http://localhost/*"
   ],
   "action": {
-    "default_title": "Cook-DB 测试工具",
-    "default_popup": "popup.html"
+    "default_title": "Cook-DB 测试工具"
   },
   "options_page": "options.html",
   "background": {
