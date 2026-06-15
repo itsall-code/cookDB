@@ -1,135 +1,59 @@
 # Cook-DB
 
-Cook-DB 是一个面向游戏测试/联调场景的数据库处理工具。项目当前包含三部分：
+**本地游戏联调的数据库工作台** — Redis 读写与备份、MySQL 查询与导入、账号 MessagePack 本地化，一条链路跑通。
 
-1. **Rust 后端服务**：提供 HTTP API，用于连接 Redis/MySQL、备份 Redis 数据库、删除 Key/Table、读取/写入 Redis Hash 字段，以及对账号数据进行本地化处理。
-2. **Chrome/Chromium 浏览器扩展**：提供轻量化操作面板，用于配置环境并触发常用数据库操作。
-3. **Python 脚本工具**：早期/辅助版命令行工具，用于导入、备份、本地化、批处理和跨服数据处理。
+Rust 后端（`:8642`）+ Chrome 扩展面板 + 可选 Python 脚本。面向测试/联调场景，**不是**生产运维平台。
 
-> ⚠️ 本项目会执行 `FLUSHDB`、`DEL`、`RESTORE REPLACE` 等高风险 Redis 操作，也提供 MySQL 写入/DDL 执行入口。请务必先确认目标库、备份数据和配置文件，避免误删生产或重要测试数据。
+> **先读这句：** 本工具会执行 `FLUSHDB`、`DELETE`、`RESTORE REPLACE`、MySQL `DROP` 等不可逆操作。操作前确认目标库、备份与确认码；勿对生产或共享测试库直接动手。
 
-## 目录
+---
 
-- [功能概览](#功能概览)
-- [项目结构](#项目结构)
-- [运行环境](#运行环境)
-- [快速开始：Rust 后端](#快速开始rust-后端)
-- [浏览器扩展使用方式](#浏览器扩展使用方式)
-- [Python 脚本使用方式](#python-脚本使用方式)
-- [配置说明](#配置说明)
-- [HTTP API 文档](#http-api-文档)
-- [账号本地化规则](#账号本地化规则)
-- [安全注意事项](#安全注意事项)
-- [开发与测试](#开发与测试)
-- [常见问题](#常见问题)
+## 30 秒看懂
 
-## 功能概览
+| 维度 | 事实 |
+| --- | --- |
+| 默认端口 | `127.0.0.1:8642` |
+| 扩展版本 | `0.3.0`（Manifest V3） |
+| Redis | 连接测试、清库、删 Key、全库备份、Hash 读写（含 MessagePack 解码） |
+| MySQL | SELECT 查询（默认 LIMIT 200，最大 1000）、DML/DDL 执行、流式 SQL 导入、清库 |
+| 账号本地化 | 单账号 / 批量 / 全表 `HSCAN`，改写 platform、group、server |
+| 配置存储 | 扩展 `chrome.storage.local`；后端 `backend/config/app.json` |
+| 适用边界 | 本地或内网工具；CORS 宽松，**无鉴权** |
 
-### Redis 基础能力
+---
 
-- 测试 Redis 连接是否可用。
-- 清空指定 Redis DB。
-- 删除指定 Key 或指定表名。
-- 将源 Redis DB 备份/复制到目标 Redis DB。
-- 读取 Hash 字段，并自动尝试将二进制内容解析为：
-  - MessagePack JSON；
-  - UTF-8 文本；
-  - 原始二进制 Base64。
-- 以 Base64 形式写回 Hash 字段的原始字节数据。
-- 列出指定 Hash 的所有字段。
-
-### MySQL 基础能力
-
-- 测试 MySQL 连接是否可用。
-- 列出当前数据库中的表。
-- 执行只读 `SELECT` 查询，并将结果转为 JSON。
-- 执行带确认码保护的写入或 DDL 语句。
-
-### 游戏账号本地化能力
-
-- 单账号本地化：从源 Redis 的指定 Hash Field 读取账号数据，改写平台、分组、服务器等字段后写入目标 Redis。
-- 批量本地化：按指定 Field 列表批量处理。
-- 全表本地化：使用 `HSCAN` 扫描整个 Hash 并批量写入，适合处理 `Account` 等账号表。
-- 自动为目标账号 Field 添加登录前缀，例如 `local_`、`yhzr2_`。
-
-### 辅助入口
-
-- Rust 后端适合作为当前主服务入口。
-- 浏览器扩展适合日常手动操作。
-- Python 脚本保留了命令行菜单和批处理流程，适合离线或历史工作流。
-
-## 项目结构
+## 架构
 
 ```text
-cook-db/
-├── README.md
-├── LICENSE
-├── backend/                 # Rust HTTP 后端
-│   ├── Cargo.toml
-│   ├── Cargo.lock
-│   ├── config/
-│   │   └── app.json         # 后端监听地址配置
-│   └── src/
-│       ├── main.rs          # Axum 服务入口
-│       ├── routes/          # HTTP 路由
-│       ├── services/        # Redis、MySQL 与本地化业务逻辑
-│       ├── models/          # 请求/响应/配置模型
-│       ├── utils/           # MessagePack 编解码工具
-│       └── error.rs         # 统一错误响应
-├── extension/               # Chrome/Chromium Manifest V3 扩展
-│   ├── manifest.json
-│   ├── popup.html/js
-│   ├── options.html/js
-│   ├── style.css
-│   └── icons/
-└── scripts/python/          # Python 版脚本工具
-    ├── cfg/                 # 示例配置
-    ├── src/                 # Python 源码
-    ├── test/                # 简单脚本/测试样例
-    └── temp/                # 配置模板与临时文件
+Chrome Extension
+  popup.html      Redis 操作 + MySQL 入口
+  mysql.html      MySQL 工作台（查询 / 执行 / 导入 / 清库）
+  options.html    多环境 + 命名 MySQL 连接
+        │ fetch JSON
+        ▼
+Axum Backend (:8642)
+  routes/redis     连接、清库、备份、Hash
+  routes/mysql     查询、执行、导入、元数据
+  routes/process   账号本地化
+        │
+        ▼
+Redis Server · MySQL Server
 ```
 
-## 运行环境
+Python 脚本（`scripts/python/`）保留早期命令行菜单，适合离线批处理；**新功能优先走 Rust + 扩展**。
 
-### 必需环境
+---
 
-- Redis Server：本地或远程 Redis 实例。
-- MySQL Server：仅当使用 MySQL 能力时需要。
-- Rust：建议安装稳定版 Rust 工具链。
-- Chrome/Chromium：仅当使用浏览器扩展时需要。
-- Python 3.10+：仅当使用 `scripts/python` 脚本时需要；脚本中使用了 `match/case` 语法。
+## 快速开始
 
-### Rust 后端主要依赖
-
-后端基于：
-
-- `axum`：HTTP API 服务。
-- `tokio`：异步运行时。
-- `redis`：异步 Redis 客户端。
-- `sqlx`：异步 MySQL 客户端。
-- `serde` / `serde_json`：序列化与 JSON 处理。
-- `rmp-serde`：MessagePack 编解码。
-- `base64`：二进制字段编码。
-- `tower-http`：CORS 支持。
-
-### Python 脚本主要依赖
-
-Python 脚本使用：
-
-- `redis`
-- `msgpack`
-
-安装示例：
+### 1. 启动后端
 
 ```bash
-python -m pip install redis msgpack
+cd backend
+cargo run
 ```
 
-## 快速开始：Rust 后端
-
-### 1. 配置监听地址
-
-后端配置文件位于 `backend/config/app.json`：
+默认监听 `http://127.0.0.1:8642`。修改 `backend/config/app.json`：
 
 ```json
 {
@@ -140,111 +64,111 @@ python -m pip install redis msgpack
 }
 ```
 
-如需允许局域网访问，可将 `host` 改为 `0.0.0.0`。请注意这会暴露危险操作接口，务必配合网络隔离或代理鉴权。
-
-### 2. 启动服务
-
-```bash
-cd backend
-cargo run
-```
-
-启动成功后会输出类似：
-
-```text
-CookDB Rust server listening on http://127.0.0.1:8642
-```
-
-### 3. 健康检查
+健康检查：
 
 ```bash
 curl http://127.0.0.1:8642/api/health
 ```
 
-预期响应：
+### 2. 加载扩展
 
-```json
+1. 打开 `chrome://extensions/`，启用「开发者模式」
+2. 「加载已解压的扩展程序」→ 选择 `extension/`
+3. 在 **选项页** 配置后端地址、Redis 源/目标库、MySQL 命名连接
+4. 从 popup 进入 **MySQL 工作台**，或打开 `mysql.html`
+
+### 3. 验证连接
+
+- Redis：`POST /api/redis/test`
+- MySQL：`POST /api/mysql/test`
+
+扩展选项页可直接点「测试连接」。
+
+---
+
+## 项目结构
+
+```text
+cook-redis/
+├── backend/                 Rust HTTP 服务
+│   ├── config/app.json      监听地址
+│   ├── data/                本地 SQL 文件（导入扫描目录）
+│   └── src/
+│       ├── routes/          薄路由层
+│       ├── services/        Redis / MySQL / 本地化逻辑
+│       └── models/          请求与响应结构
+├── extension/               Chrome MV3 扩展
+│   ├── popup.html/js        Redis + MySQL 快捷入口
+│   ├── mysql.html/js        MySQL 完整工作台
+│   └── options.html/js      环境与连接管理
+└── scripts/python/          历史 CLI 工具（可选）
+```
+
+产品路线从 `cook-redis` 向 **cook-tools** 演进，详见 [`.cursor/skills/cook-tools/roadmap.md`](.cursor/skills/cook-tools/roadmap.md)。
+
+---
+
+## 扩展使用
+
+### 环境模型
+
+配置保存在 `chrome.storage.local`：
+
+```javascript
 {
-  "success": true,
-  "data": "cookdb-rs is running",
-  "message": "ok"
+  envs: { [name]: EnvConfig },
+  activeEnv: "dev",
+  mysqlConnections: [ /* 命名连接 */ ]
 }
 ```
 
-## 浏览器扩展使用方式
+每个环境含 `apiBase`、源/目标 Redis、`mysql` 字段、`serverConfig`（本地化参数）。
 
-扩展位于 `extension/`，采用 Chrome Manifest V3。
+### 三个入口
 
-### 安装步骤
+| 页面 | 用途 |
+| --- | --- |
+| `popup.html` | Redis 日常操作；MySQL 快捷 Tab（查询、导入、清库） |
+| `mysql.html` | 完整 MySQL 工作台：连接切换、SQL 编辑、历史、批量导入 |
+| `options.html` | 多环境 CRUD、MySQL 命名连接管理 |
 
-1. 打开 Chrome/Chromium。
-2. 访问 `chrome://extensions/`。
-3. 打开右上角「开发者模式」。
-4. 点击「加载已解压的扩展程序」。
-5. 选择本项目的 `extension/` 目录。
-6. 确保 Rust 后端已启动，默认地址为 `http://127.0.0.1:8642`。
+`manifest.json` 默认允许 `http://127.0.0.1/*` 与 `http://localhost/*`。后端改端口时需同步 `host_permissions`。
 
-### 扩展配置
+---
 
-扩展会将环境配置保存在浏览器本地存储中。常见配置包括：
+## 能力说明
 
-- 环境名称，例如 `default`、`dev`、`qa`。
-- 源 Redis：`host`、`port`、`db`、`password`。
-- 目标 Redis：`host`、`port`、`db`、`password`。
-- MySQL：`host`、`port`、`username`、`password`、`database`。
-- 本地化配置：
-  - `pre_login`：目标账号前缀；
-  - `platform`：目标平台；
-  - `group`：目标分组；
-  - `server`：目标服务器名或区服标识。
+### Redis
 
-> 说明：扩展的 `manifest.json` 默认允许访问 `http://127.0.0.1:8642/*` 和 `http://localhost:8642/*`。如果后端监听地址或端口不同，需要同步修改扩展权限配置。
+- 连接测试、Ping
+- 清空指定 DB（需确认码）
+- 按 Key 或「表名」删除
+- 源库 → 目标库全量备份（**会先 FLUSHDB 目标库**）
+- Hash 字段读/写/列表；读取时自动尝试 MessagePack → JSON、UTF-8 或 Base64
 
-## Python 脚本使用方式
+### MySQL
 
-Python 工具位于 `scripts/python/`，包含配置、处理逻辑和测试脚本。
+- 连接测试、表列表、列列表、按主键列查单值
+- 单条 `SELECT` 查询（后端包 LIMIT，默认 200，最大 1000）
+- 单条 DML/DDL 执行（需确认码；`DELETE`/`TRUNCATE`/`DROP` 默认拦截）
+- 清空当前 database（需确认码）
+- 本地 `data/` 目录 SQL 文件流式导入（1MB 分块、200 条/批事务，不经浏览器上传）
 
-### 1. 安装依赖
+### 账号本地化
 
-```bash
-python -m pip install redis msgpack
-```
+从源 Redis Hash 读取 MessagePack 账号数据，改写 platform / group / server 等字段，写入目标库。支持：
 
-### 2. 修改配置
+- 单 Field：`/api/process/localize-account`
+- 指定 Field 列表：`/api/process/localize-batch`
+- 全表 HSCAN：`/api/process/localize-all-acc`
 
-常用配置文件位于 `scripts/python/cfg/`：
+目标 Field 默认加前缀，如 `local_`、`yhzr2_`（由 `pre_login` 控制）。
 
-- `local_db_cfg.json`：本服/目标库配置，以及账号本地化参数。
-- `source_db_cfg.json`：源库配置。
-- `backup_db_cfg.json`：备份库配置。
-- `cross_db_cfg.json`：跨服库配置。
-- `del_tb.json`：需要删除的表名列表。
+---
 
-### 3. 启动菜单工具
+## 配置结构
 
-```bash
-cd scripts/python/src
-python cookredis.py
-```
-
-菜单提供以下工作流：
-
-1. 将源库导入本服库。
-2. 将本服库备份到备份库。
-3. 本地化账号数据。
-4. 删除指定本服 DB。
-5. 重新初始化配置。
-6. 批量处理多个配置目录。
-7. 跨服数据处理。
-0. 退出。
-
-> 注意：Python 脚本中的 `clear()` 使用了 Windows 的 `cls` 命令；在 macOS/Linux 上可能需要改为 `clear`。
-
-## 配置说明
-
-### Rust RedisConfig
-
-Rust API 中 Redis 连接配置统一使用如下结构：
+### RedisConfig
 
 ```json
 {
@@ -255,18 +179,19 @@ Rust API 中 Redis 连接配置统一使用如下结构：
 }
 ```
 
-字段说明：
+### MySqlConfig
 
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `host` | string | 是 | Redis 主机名或 IP。 |
-| `port` | number | 是 | Redis 端口。 |
-| `password` | string/null | 否 | Redis 密码；无密码可传 `null`。 |
-| `db` | number | 是 | Redis DB 编号。 |
+```json
+{
+  "host": "127.0.0.1",
+  "port": 3306,
+  "username": "root",
+  "password": null,
+  "database": "game"
+}
+```
 
-### Rust ServerConfig
-
-账号本地化接口使用如下服务配置：
+### ServerConfig（本地化）
 
 ```json
 {
@@ -277,162 +202,74 @@ Rust API 中 Redis 连接配置统一使用如下结构：
 }
 ```
 
-字段说明：
+`platform` / `group` 能解析为整数时，优先写入数字字段。
 
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `platform` | string | 是 | 目标平台值。若能解析为整数，会优先写入数字字段。 |
-| `group` | string | 是 | 目标分组值。若能解析为整数，会优先写入数字字段。 |
-| `server` | string | 是 | 目标服务器/区服标识。 |
-| `pre_login` | string | 否 | 写入目标账号 Field 时使用的前缀。 |
+---
 
-### Python local_db_cfg.json 示例
+## HTTP API
 
-```json
-{
-  "redis": {
-    "host": "localhost",
-    "port": 6379,
-    "db": 2,
-    "password": null
-  },
-  "server": {
-    "platform": 1,
-    "group": 1
-  },
-  "account": "Account",
-  "preLogin": "yhzr2_"
-}
-```
+### 响应格式
 
-## HTTP API 文档
-
-后端所有成功响应大致遵循：
+成功：
 
 ```json
-{
-  "success": true,
-  "data": {},
-  "message": "ok"
-}
+{ "success": true, "data": {}, "message": "ok" }
 ```
 
-错误响应大致遵循：
+失败：
 
 ```json
-{
-  "success": false,
-  "message": "错误信息"
-}
+{ "success": false, "message": "错误信息" }
 ```
 
-### 健康检查
+### 路由总览
 
-#### `GET /api/health`
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/health` | 服务存活 |
+| GET | `/api/redis/ping` | Redis 路由 Ping |
+| POST | `/api/redis/test` | Redis 连接测试 |
+| POST | `/api/redis/flushdb` | 清空 DB（需确认） |
+| POST | `/api/redis/delete-keys` | 删 Key（需确认） |
+| POST | `/api/redis/delete-tables` | 按表名删 Key（需确认） |
+| POST | `/api/redis/backup` | 源库 → 目标库备份 |
+| POST | `/api/redis/hash/get` | 读 Hash 字段 |
+| POST | `/api/redis/hash/set` | 写 Hash 字段（Base64） |
+| POST | `/api/redis/hash/list` | 列出 Hash 字段 |
+| GET | `/api/mysql/ping` | MySQL 路由 Ping |
+| POST | `/api/mysql/test` | MySQL 连接测试 |
+| POST | `/api/mysql/tables` | 表列表 |
+| POST | `/api/mysql/columns` | 指定表的列名 |
+| POST | `/api/mysql/lookup` | 按主键列查单列值 |
+| POST | `/api/mysql/query` | SELECT 查询 |
+| POST | `/api/mysql/execute` | DML/DDL 执行 |
+| POST | `/api/mysql/flush-db` | 清空 MySQL database |
+| GET | `/api/mysql/sql-files` | 扫描 `data/` 下 `.sql` 文件 |
+| POST | `/api/mysql/import-file` | 启动流式导入 |
+| POST | `/api/mysql/import-file/status` | 查询导入进度 |
+| POST | `/api/mysql/import-file/cancel` | 取消导入 |
+| POST | `/api/process/localize-account` | 单账号本地化 |
+| POST | `/api/process/localize-batch` | 批量本地化 |
+| POST | `/api/process/localize-all-acc` | 全表本地化 |
 
-检查服务是否运行。
+### 确认码规则
 
-```bash
-curl http://127.0.0.1:8642/api/health
-```
+危险操作必须严格匹配 `confirm_text`：
 
-#### `GET /api/redis/ping`
+| 操作 | 格式 |
+| --- | --- |
+| Redis 清库 | `FLUSHDB db=<db> host=<host>` |
+| Redis 删 Key | `DELETE <count> db=<db>` |
+| Redis 删表名 Key | `DELETE_TABLES <count> db=<db>` |
+| MySQL 执行 | `EXECUTE mysql <host> db=<database>` |
+| MySQL 危险语句 | `DANGEROUS EXECUTE mysql <host> db=<database>` + `allow_dangerous: true` |
+| MySQL 清库 | `FLUSH mysql <host> db=<database>` |
+| MySQL 导入 | `IMPORT mysql <host> db=<database> file=<文件名>` |
 
-返回 Redis 路由层的简单 `pong`。
+### 常用示例
 
-```bash
-curl http://127.0.0.1:8642/api/redis/ping
-```
-
-#### `GET /api/mysql/ping`
-
-返回 MySQL 路由层的简单 `pong`。
-
-```bash
-curl http://127.0.0.1:8642/api/mysql/ping
-```
-
-### MySQL 连接测试
-
-#### `POST /api/mysql/test`
-
-请求体为 MySqlConfig：
-
-```bash
-curl -X POST http://127.0.0.1:8642/api/mysql/test \
-  -H 'Content-Type: application/json' \
-  -d '{"host":"127.0.0.1","port":3306,"username":"root","password":null,"database":"test"}'
-```
-
-### MySQL 表列表
-
-#### `POST /api/mysql/tables`
-
-```bash
-curl -X POST http://127.0.0.1:8642/api/mysql/tables \
-  -H 'Content-Type: application/json' \
-  -d '{"target":{"host":"127.0.0.1","port":3306,"username":"root","password":null,"database":"test"}}'
-```
-
-### MySQL 查询
-
-#### `POST /api/mysql/query`
-
-仅允许单条 `SELECT`，后端会包一层 `LIMIT`，默认最多返回 200 行，最大 1000 行。
-
-```bash
-curl -X POST http://127.0.0.1:8642/api/mysql/query \
-  -H 'Content-Type: application/json' \
-  -d '{"target":{"host":"127.0.0.1","port":3306,"username":"root","password":null,"database":"test"},"sql":"SELECT * FROM users","limit":50}'
-```
-
-### MySQL 执行语句
-
-#### `POST /api/mysql/execute`
-
-仅允许单条 `INSERT`、`UPDATE`、`DELETE`、`REPLACE` 或 DDL 语句，并要求 `confirm_text` 严格匹配 `EXECUTE mysql <host> db=<database>`。
-
-`DELETE` / `TRUNCATE` / `DROP` 默认拒绝；需设置 `allow_dangerous: true` 且确认码为 `DANGEROUS EXECUTE mysql <host> db=<database>`。
-
-```bash
-curl -X POST http://127.0.0.1:8642/api/mysql/execute \
-  -H 'Content-Type: application/json' \
-  -d '{"target":{"host":"127.0.0.1","port":3306,"username":"root","password":null,"database":"test"},"sql":"UPDATE users SET flag = 1 WHERE id = 1","confirm_text":"EXECUTE mysql 127.0.0.1 db=test"}'
-```
-
-### MySQL 流式导入 SQL 文件
-
-大体积 dump（如 `data/test_data.sql`）由后端本地路径流式读取，1MB 分块解析 + 200 条/批事务提交，避免经浏览器上传。
-
-#### `GET /api/mysql/sql-files`
-
-扫描后端 `data/` 目录（含子目录）下全部 `.sql` 文件，供扩展导入页下拉选择。
-
-```bash
-curl http://127.0.0.1:8642/api/mysql/sql-files
-```
-
-响应 `data` 为数组，每项含 `path`（如 `data/test_data.sql`）、`name`、`size`（字节）。
-
-#### `POST /api/mysql/import-file`
-
-确认码：`IMPORT mysql <host> db=<database> file=<文件名>`
-
-```bash
-curl -X POST http://127.0.0.1:8642/api/mysql/import-file \
-  -H 'Content-Type: application/json' \
-  -d '{"target":{"host":"127.0.0.1","port":3306,"username":"root","password":null,"database":"37wan_70001"},"file_path":"data/test_data.sql","confirm_text":"IMPORT mysql 127.0.0.1 db=37wan_70001 file=test_data.sql"}'
-```
-
-#### `POST /api/mysql/import-file/status` / `cancel`
-
-请求体：`{"job_id":"<uuid>"}`。返回进度字段含 `bytes_read`、`file_size`、`statements_executed`、`bytes_per_sec`、`eta_sec`。
-
-### Redis 连接测试
-
-#### `POST /api/redis/test`
-
-请求体为 RedisConfig：
+<details>
+<summary><strong>Redis 连接测试</strong></summary>
 
 ```bash
 curl -X POST http://127.0.0.1:8642/api/redis/test \
@@ -440,33 +277,10 @@ curl -X POST http://127.0.0.1:8642/api/redis/test \
   -d '{"host":"127.0.0.1","port":6379,"password":null,"db":0}'
 ```
 
-成功后返回 `connected`。
+</details>
 
-### 清空 DB
-
-#### `POST /api/redis/flushdb`
-
-请求体：
-
-```json
-{
-  "target": {
-    "host": "127.0.0.1",
-    "port": 6379,
-    "password": null,
-    "db": 2
-  },
-  "confirm_text": "FLUSHDB db=2 host=127.0.0.1"
-}
-```
-
-`confirm_text` 必须严格等于：
-
-```text
-FLUSHDB db=<db> host=<host>
-```
-
-示例：
+<details>
+<summary><strong>Redis 清库</strong></summary>
 
 ```bash
 curl -X POST http://127.0.0.1:8642/api/redis/flushdb \
@@ -474,84 +288,12 @@ curl -X POST http://127.0.0.1:8642/api/redis/flushdb \
   -d '{"target":{"host":"127.0.0.1","port":6379,"password":null,"db":2},"confirm_text":"FLUSHDB db=2 host=127.0.0.1"}'
 ```
 
-### 删除 Keys
+</details>
 
-#### `POST /api/redis/delete-keys`
+<details>
+<summary><strong>Redis 备份（源 → 目标）</strong></summary>
 
-请求体：
-
-```json
-{
-  "target": {
-    "host": "127.0.0.1",
-    "port": 6379,
-    "password": null,
-    "db": 2
-  },
-  "keys": ["key1", "key2"],
-  "confirm_text": "DELETE 2 db=2"
-}
-```
-
-`confirm_text` 必须严格等于：
-
-```text
-DELETE <keys.length> db=<db>
-```
-
-### 删除 Tables
-
-#### `POST /api/redis/delete-tables`
-
-该接口本质上也是删除 Redis Key，只是参数名为 `tables`，适合按业务表名删除。
-
-请求体：
-
-```json
-{
-  "target": {
-    "host": "127.0.0.1",
-    "port": 6379,
-    "password": null,
-    "db": 2
-  },
-  "tables": ["tb1", "tb2"],
-  "confirm_text": "DELETE_TABLES 2 db=2"
-}
-```
-
-`confirm_text` 必须严格等于：
-
-```text
-DELETE_TABLES <tables.length> db=<db>
-```
-
-### 备份数据库
-
-#### `POST /api/redis/backup`
-
-将源 DB 的所有 Key 复制到目标 DB。执行时会先清空目标 DB，然后对源库所有 Key 执行 `DUMP`，再在目标库执行 `RESTORE ... REPLACE`。
-
-请求体：
-
-```json
-{
-  "source": {
-    "host": "127.0.0.1",
-    "port": 6379,
-    "password": null,
-    "db": 1
-  },
-  "target": {
-    "host": "127.0.0.1",
-    "port": 6379,
-    "password": null,
-    "db": 2
-  }
-}
-```
-
-示例：
+将源 DB 所有 Key `DUMP` 后 `RESTORE` 到目标库；**执行前清空目标 DB**。
 
 ```bash
 curl -X POST http://127.0.0.1:8642/api/redis/backup \
@@ -559,285 +301,182 @@ curl -X POST http://127.0.0.1:8642/api/redis/backup \
   -d '{"source":{"host":"127.0.0.1","port":6379,"password":null,"db":1},"target":{"host":"127.0.0.1","port":6379,"password":null,"db":2}}'
 ```
 
-### 读取 Hash 字段
+</details>
 
-#### `POST /api/redis/hash/get`
+<details>
+<summary><strong>Redis Hash 读取</strong></summary>
 
-读取指定 Hash Field，并返回可视化结果。
+响应 `data` 含 `decoded_type`（`msgpack-json` / `utf8-text` / `binary`）、`decoded_json`、`raw_base64` 等。
 
-请求体：
-
-```json
-{
-  "target": {
-    "host": "127.0.0.1",
-    "port": 6379,
-    "password": null,
-    "db": 2
-  },
-  "hash_name": "Account",
-  "field": "test_user"
-}
+```bash
+curl -X POST http://127.0.0.1:8642/api/redis/hash/get \
+  -H 'Content-Type: application/json' \
+  -d '{"target":{"host":"127.0.0.1","port":6379,"password":null,"db":2},"hash_name":"Account","field":"test_user"}'
 ```
 
-响应中的 `data` 包含：
+</details>
 
-| 字段 | 说明 |
-| --- | --- |
-| `hash_name` | Hash 名称。 |
-| `field` | Field 名称。 |
-| `raw_base64` | 原始字节的 Base64 表示。 |
-| `raw_size` | 原始字节长度。 |
-| `decoded_type` | `msgpack-json`、`utf8-text` 或 `binary`。 |
-| `decoded_json` | MessagePack 可解析时的 JSON 值。 |
-| `decoded_text` | UTF-8 可解析时的文本。 |
+<details>
+<summary><strong>MySQL 查询</strong></summary>
 
-### 写入 Hash 字段
+仅允许单条 `SELECT`；后端包一层子查询 LIMIT。
 
-#### `POST /api/redis/hash/set`
-
-以 Base64 形式写入原始字节。
-
-请求体：
-
-```json
-{
-  "target": {
-    "host": "127.0.0.1",
-    "port": 6379,
-    "password": null,
-    "db": 2
-  },
-  "hash_name": "Account",
-  "field": "test_user",
-  "base64_value": "SGVsbG8="
-}
+```bash
+curl -X POST http://127.0.0.1:8642/api/mysql/query \
+  -H 'Content-Type: application/json' \
+  -d '{"target":{"host":"127.0.0.1","port":3306,"username":"root","password":null,"database":"test"},"sql":"SELECT * FROM users","limit":50}'
 ```
 
-### 列出 Hash 字段
+</details>
 
-#### `POST /api/redis/hash/list`
+<details>
+<summary><strong>MySQL 执行</strong></summary>
 
-请求体：
-
-```json
-{
-  "target": {
-    "host": "127.0.0.1",
-    "port": 6379,
-    "password": null,
-    "db": 2
-  },
-  "hash_name": "Account"
-}
+```bash
+curl -X POST http://127.0.0.1:8642/api/mysql/execute \
+  -H 'Content-Type: application/json' \
+  -d '{"target":{"host":"127.0.0.1","port":3306,"username":"root","password":null,"database":"test"},"sql":"UPDATE users SET flag = 1 WHERE id = 1","confirm_text":"EXECUTE mysql 127.0.0.1 db=test"}'
 ```
 
-### 单账号本地化
+`DELETE` / `TRUNCATE` / `DROP` 需额外设置 `"allow_dangerous": true` 并使用 `DANGEROUS EXECUTE ...` 确认码。
 
-#### `POST /api/process/localize-account`
+</details>
 
-请求体：
+<details>
+<summary><strong>MySQL 流式导入</strong></summary>
 
-```json
-{
-  "source": {
-    "host": "127.0.0.1",
-    "port": 6379,
-    "password": null,
-    "db": 1
-  },
-  "target": {
-    "host": "127.0.0.1",
-    "port": 6379,
-    "password": null,
-    "db": 2
-  },
-  "hash_name": "Account",
-  "source_field": "player_001",
-  "target_field": null,
-  "server": {
-    "platform": "1",
-    "group": "2",
-    "server": "S2",
-    "pre_login": "local_"
-  }
-}
+```bash
+# 列出可导入文件
+curl http://127.0.0.1:8642/api/mysql/sql-files
+
+# 启动导入
+curl -X POST http://127.0.0.1:8642/api/mysql/import-file \
+  -H 'Content-Type: application/json' \
+  -d '{"target":{"host":"127.0.0.1","port":3306,"username":"root","password":null,"database":"game"},"file_path":"data/test_data.sql","confirm_text":"IMPORT mysql 127.0.0.1 db=game file=test_data.sql"}'
+
+# 查询进度 / 取消
+curl -X POST http://127.0.0.1:8642/api/mysql/import-file/status \
+  -H 'Content-Type: application/json' \
+  -d '{"job_id":"<uuid>"}'
 ```
 
-行为说明：
+进度字段含 `bytes_read`、`statements_executed`、`bytes_per_sec`、`eta_sec` 等。
 
-- 从 `source` 的 `hash_name/source_field` 读取 MessagePack 数据。
-- 将数据转成 JSON 值并按本地化规则替换。
-- 重新编码为 MessagePack。
-- 写入 `target` 的同名 Hash。
-- 如果 `target_field` 为 `null`，则目标 Field 为 `pre_login + source_field`。
+</details>
 
-### 批量字段本地化
+<details>
+<summary><strong>账号本地化（单账号）</strong></summary>
 
-#### `POST /api/process/localize-batch`
-
-请求体：
-
-```json
-{
-  "source": {
-    "host": "127.0.0.1",
-    "port": 6379,
-    "password": null,
-    "db": 1
-  },
-  "target": {
-    "host": "127.0.0.1",
-    "port": 6379,
-    "password": null,
-    "db": 2
-  },
-  "hash_name": "Account",
-  "source_fields": ["player_001", "player_002"],
-  "server": {
-    "platform": "1",
-    "group": "2",
-    "server": "S2",
-    "pre_login": "local_"
-  }
-}
+```bash
+curl -X POST http://127.0.0.1:8642/api/process/localize-account \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "source":{"host":"127.0.0.1","port":6379,"password":null,"db":1},
+    "target":{"host":"127.0.0.1","port":6379,"password":null,"db":2},
+    "hash_name":"Account",
+    "source_field":"player_001",
+    "target_field":null,
+    "server":{"platform":"1","group":"2","server":"S2","pre_login":"local_"}
+  }'
 ```
 
-响应 `data` 为处理摘要：
+`target_field` 为 `null` 时，写入 `pre_login + source_field`。
 
-```json
-{
-  "hash_name": "Account",
-  "scanned": 2,
-  "localized": 2,
-  "skipped": 0,
-  "written": 2,
-  "elapsed_ms": 12
-}
-```
+</details>
 
-### 全表账号本地化
-
-#### `POST /api/process/localize-all-acc`
-
-请求体与 `localize-batch` 相同，但 `source_fields` 当前不会作为扫描范围使用；服务会对 `hash_name` 执行 `HSCAN`，扫描所有 Field。
-
-适合全量处理 `Account` Hash：
-
-```json
-{
-  "source": {
-    "host": "127.0.0.1",
-    "port": 6379,
-    "password": null,
-    "db": 1
-  },
-  "target": {
-    "host": "127.0.0.1",
-    "port": 6379,
-    "password": null,
-    "db": 2
-  },
-  "hash_name": "Account",
-  "source_fields": [],
-  "server": {
-    "platform": "1",
-    "group": "2",
-    "server": "S2",
-    "pre_login": "local_"
-  }
-}
-```
+---
 
 ## 账号本地化规则
 
-Rust 后端会先将 Hash Field 的原始字节按 MessagePack 解码为 JSON 值，然后递归处理：
+后端将 Hash 原始字节按 MessagePack 解码为 JSON，再递归改写：
 
-1. **根数组处理**
-   - 如果根数组前两个元素看起来是数字，会分别替换为 `platform` 和 `group`。
-   - 如果根数组第一个元素仍是数组，也会尝试处理该内层数组的前两个元素。
+1. **根数组**：前两个数字元素替换为 `platform`、`group`；内层数组同理。
+2. **对象键**：`platform`/`plat`/`platformId`、`group`/`groupId`/`gid`、`server`/`sid`/`zone` 会被替换。
+3. **字符串片段**：替换 `platform=...`、`gid=...`、`server=...` 及 `S数字` 形式的服务器标识。
+4. **Field 命名**：批量/全表统一 `pre_login + 原 Field`。
 
-2. **对象字段处理**
-   - 以下键会被视为平台字段：`platform`、`plat`、`platformId`。
-   - 以下键会被视为分组字段：`group`、`groupId`、`gid`。
-   - 以下键会被视为服务器字段：`server`、`sid`、`zone`。
+非 MessagePack 的 Field 在批量接口中计入 `skipped`。
 
-3. **字符串内容处理**
-   - 会替换字符串中的平台、分组、服务器键值片段，例如 `platform=...`、`gid=...`、`server=...`。
-   - 会使用正则替换形如 `S数字` 的服务器标识为目标 `server`。
+---
 
-4. **目标 Field 命名**
-   - 单账号接口：优先使用显式 `target_field`；没有传入时使用 `pre_login + source_field`。
-   - 批量/全表接口：统一使用 `pre_login + 原 Field`。
+## 安全与边界
 
-> 如果某个 Field 不是合法 MessagePack，批量接口会跳过该 Field 并增加 `skipped` 计数。
+| 风险 | 说明 |
+| --- | --- |
+| 备份覆盖目标库 | `/api/redis/backup` 先 `FLUSHDB` 目标 DB |
+| 删除不可恢复 | `delete-keys`、`flushdb`、`flush-db` 无软删除 |
+| 无鉴权 | 适合本机；暴露到局域网需自行加反向代理认证 |
+| 宽松 CORS | 方便扩展调用，不适合公网直出 |
+| 大库备份 | 当前用 `KEYS *` + 逐 Key `DUMP`/`RESTORE`，大库建议低峰执行 |
 
-## 安全注意事项
+**操作前备份。** 处理 `Account` 或跨服数据前，先复制到备份库验证。
 
-- **备份接口会清空目标库**：`/api/redis/backup` 会先对目标 Redis DB 执行 `FLUSHDB`。
-- **删除接口不可恢复**：`delete-keys`、`delete-tables` 会直接删除目标 Redis 中的 Key。
-- **清库接口不可恢复**：`flushdb` 会清空目标 DB。
-- **不要将后端直接暴露到不可信网络**：当前后端启用了宽松 CORS，适合本地工具场景，不适合作为公网服务直接部署。
-- **上线前请增加鉴权**：如果需要多人或远程使用，建议在反向代理或后端层增加认证、审计和白名单。
-- **操作前先备份**：尤其是在处理 `Account`、跨服数据或大批量 Key 前，建议先复制到备份库验证。
+---
 
-## 开发与测试
+## Python 脚本（可选）
 
-### Rust 后端检查
+```bash
+python -m pip install redis msgpack
+cd scripts/python/src
+python cookredis.py
+```
+
+菜单含：源库导入、备份、本地化、清库、批量配置、跨服处理。配置在 `scripts/python/cfg/`。
+
+> Windows 下 `clear()` 使用 `cls`；macOS/Linux 可改为 `clear`。
+
+---
+
+## 开发与检查
 
 ```bash
 cd backend
 cargo fmt --check
 cargo check
-```
-
-### Rust 后端运行
-
-```bash
-cd backend
 cargo run
 ```
 
-### Python 简单脚本
-
-```bash
-cd scripts/python/src
-python cookredis.py
-```
-
-### Redis 测试数据
-
-`scripts/python/test/input_test_data.py` 可向本地 Redis 写入示例 `Account` Hash 数据。运行前请确认它连接的是预期 Redis：
+写入测试数据（确认 Redis 地址后再跑）：
 
 ```bash
 cd scripts/python/test
 python input_test_data.py
 ```
 
+---
+
+## 路线图
+
+当前已完成 Redis 全套、MySQL API + 扩展工作台、账号本地化。后续按阶段推进：
+
+| 阶段 | 方向 |
+| --- | --- |
+| P1 | 游戏脚本中心、SQL 模板库、数据快照 diff、Redis+MySQL 按 UID 联动 |
+| P2 | Excel 导出、账号数据对比、批量 UID 执行 |
+
+详见 [roadmap.md](.cursor/skills/cook-tools/roadmap.md) 与 [gap-analysis.md](.cursor/skills/cook-tools/gap-analysis.md)。
+
+---
+
 ## 常见问题
 
-### 1. 后端启动后扩展显示无法连接怎么办？
+**扩展连不上后端？**  
+确认 `cargo run` 已启动、`curl /api/health` 正常、`options.html` 中 `apiBase` 与 `manifest.json` 的 `host_permissions` 一致。
 
-- 确认后端实际监听地址和端口。
-- 确认 `extension/manifest.json` 中的 `host_permissions` 包含后端地址。
-- 确认 Redis 配置中的源库 `host` 不为空。
-- 先用 `curl http://127.0.0.1:8642/api/health` 检查后端是否可用。
+**Redis 连接失败？**  
+检查 host/port/db/password；无密码时传 `null`；Docker/远程库注意 bind 与防火墙。
 
-### 2. Redis 连接失败怎么办？
+**本地化报 MessagePack 解析失败？**  
+先用 `/api/redis/hash/get` 看 `decoded_type`；非 MessagePack 数据需先确认格式。
 
-- 检查 Redis Server 是否启动。
-- 检查 `host`、`port`、`db`、`password` 是否正确。
-- 如果 Redis 没有密码，`password` 建议传 `null`。
-- 如果使用 Docker 或远程 Redis，检查网络、防火墙和 Redis bind 配置。
+**备份很慢？**  
+大库 `KEYS *` 阻塞明显；后续可改 `SCAN` + Pipeline。
 
-### 3. 本地化接口返回 MessagePack 解析失败怎么办？
+**Python 还是 Rust？**  
+日常联调用 Rust + 扩展；历史批处理或离线场景可继续用 Python。
 
-说明目标 Field 的值不是当前服务预期的 MessagePack 格式。可以先使用 `/api/redis/hash/get` 查看 `decoded_type` 和 `raw_base64`，确认数据类型后再处理。
+---
 
-### 4. 备份很慢怎么办？
+## License
 
-当前 Rust 后端使用 `KEYS *` 枚举源库，并逐个 `DUMP`/`RESTORE`。对于非常大的库，建议在低峰期执行，或后续改造为基于 `SCAN` 和 Pipeline 的实现。
-
-### 5. Python 脚本适合继续使用吗？
-
-可以作为历史工作流或离线辅助工具使用。但如果需要 HTTP API、浏览器面板或异步批处理，建议优先使用 Rust 后端。
+见 [LICENSE](LICENSE)。
