@@ -11,38 +11,82 @@
     输出目录，默认 dist。
 
 .PARAMETER IncludeExtension
-    是否一并打包 Chrome 扩展（extension 目录）。
+    兼容旧用法。Chrome 扩展现在默认打包进 zip。
+
+.PARAMETER NoExtension
+    不打包 Chrome 扩展（extension 目录）。
 
 .PARAMETER SkipBuild
     跳过 cargo build（已编译好时复用现有产物）。
 
+.PARAMETER Target
+    可选 Rust target triple，例如 x86_64-pc-windows-msvc。留空使用当前默认工具链。
+
+.PARAMETER NoZip
+    只生成分发目录，不压缩。
+
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File scripts\package-backend.ps1 -IncludeExtension
+    powershell -ExecutionPolicy Bypass -File scripts\package\package-backend.ps1 -IncludeExtension
 #>
 [CmdletBinding()]
 param(
     [string]$OutDir = "dist",
     [switch]$IncludeExtension,
-    [switch]$SkipBuild
+    [switch]$NoExtension,
+    [switch]$SkipBuild,
+    [string]$Target = "",
+    [switch]$NoZip
 )
 
 $ErrorActionPreference = "Stop"
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
+function Resolve-RepoRoot {
+    $root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
+    return $root.Path
+}
+
+function Resolve-OutRoot([string]$PathValue) {
+    if ([System.IO.Path]::IsPathRooted($PathValue)) {
+        return $PathValue
+    }
+    return Join-Path $repoRoot $PathValue
+}
+
+function Assert-Command([string]$Name) {
+    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
+        throw "未找到命令: $Name。请先安装并加入 PATH。"
+    }
+}
+
+$repoRoot = Resolve-RepoRoot
 $backendDir = Join-Path $repoRoot "backend"
 $exeName = "cook-db.exe"
+$outRoot = Resolve-OutRoot $OutDir
+$includeExtensionInPackage = -not $NoExtension
+
+if (-not (Test-Path $backendDir)) { throw "未找到后端目录: $backendDir" }
+Assert-Command "cargo"
 
 Write-Host "[1/4] 编译 release（静态 CRT）..." -ForegroundColor Cyan
 if (-not $SkipBuild) {
     Push-Location $backendDir
+    $oldRustFlags = $env:RUSTFLAGS
     try {
         # 静态链接 C 运行时，目标机无需安装 VC++ 运行库
-        $env:RUSTFLAGS = "-C target-feature=+crt-static"
-        cargo build --release
+        $rustFlags = @($oldRustFlags, "-C target-feature=+crt-static") | Where-Object { $_ }
+        $env:RUSTFLAGS = $rustFlags -join " "
+        $buildArgs = @("build", "--release")
+        if ($Target) { $buildArgs += @("--target", $Target) }
+        cargo @buildArgs
         if ($LASTEXITCODE -ne 0) { throw "cargo build 失败 (exit $LASTEXITCODE)" }
     }
     finally {
-        Remove-Item Env:RUSTFLAGS -ErrorAction SilentlyContinue
+        if ($null -eq $oldRustFlags) {
+            Remove-Item Env:RUSTFLAGS -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:RUSTFLAGS = $oldRustFlags
+        }
         Pop-Location
     }
 }
@@ -59,23 +103,32 @@ try {
 finally {
     Pop-Location
 }
-$exePath = Join-Path $targetDir "release\$exeName"
+$releaseDir = if ($Target) {
+    Join-Path (Join-Path $targetDir $Target) "release"
+}
+else {
+    Join-Path $targetDir "release"
+}
+$exePath = Join-Path $releaseDir $exeName
 if (-not (Test-Path $exePath)) { throw "未找到产物: $exePath" }
 
 Write-Host "[2/4] 组织分发目录..." -ForegroundColor Cyan
-$stageDir = Join-Path $repoRoot "$OutDir\cook-db-backend"
+$stageDir = Join-Path $outRoot "cook-db-backend"
 if (Test-Path $stageDir) { Remove-Item $stageDir -Recurse -Force }
 New-Item -ItemType Directory -Path $stageDir | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $stageDir "config") | Out-Null
 
 Copy-Item $exePath (Join-Path $stageDir $exeName)
-Copy-Item (Join-Path $backendDir "config\app.json") (Join-Path $stageDir "config\app.json")
+Copy-Item (Join-Path (Join-Path $backendDir "config") "app.json") (Join-Path (Join-Path $stageDir "config") "app.json")
 
-if ($IncludeExtension) {
+if ($includeExtensionInPackage) {
     $extSrc = Join-Path $repoRoot "extension"
     if (Test-Path $extSrc) {
         Copy-Item $extSrc (Join-Path $stageDir "extension") -Recurse
         Write-Host "    已包含 extension" -ForegroundColor DarkGray
+    }
+    else {
+        throw "未找到 Chrome 扩展目录: $extSrc"
     }
 }
 
@@ -108,7 +161,7 @@ cook-db 后端 - 离线运行包
   cook-db.exe        后端可执行文件
   config\app.json    监听地址/端口配置
   start-backend.bat  启动脚本（自动切到本目录后运行）
-  extension\         （可选）Chrome MV3 扩展，浏览器"加载已解压的扩展"指向此目录
+  extension\         Chrome MV3 扩展，浏览器"加载已解压的扩展"指向此目录
 
 注意
   - exe 必须能在当前工作目录读到 config\app.json，务必用 start-backend.bat
@@ -119,15 +172,20 @@ cook-db 后端 - 离线运行包
 Set-Content -Path (Join-Path $stageDir "README.txt") -Value $readme -Encoding UTF8
 
 Write-Host "[4/4] 压缩为 zip..." -ForegroundColor Cyan
-$zipPath = Join-Path $repoRoot "$OutDir\cook-db-backend.zip"
-if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-Compress-Archive -Path $stageDir -DestinationPath $zipPath
+$zipPath = Join-Path $outRoot "cook-db-backend.zip"
+if (-not $NoZip) {
+    if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+    Compress-Archive -Path $stageDir -DestinationPath $zipPath
+}
+else {
+    Write-Host "    已跳过 zip" -ForegroundColor DarkGray
+}
 
 $exeSize = "{0:N1} MB" -f ((Get-Item (Join-Path $stageDir $exeName)).Length / 1MB)
 Write-Host ""
 Write-Host "完成！" -ForegroundColor Green
 Write-Host "  目录: $stageDir"
-Write-Host "  压缩: $zipPath"
+if (-not $NoZip) { Write-Host "  压缩: $zipPath" }
 Write-Host "  exe大小: $exeSize"
 Write-Host ""
 Write-Host "把 zip 拷到内网机器解压，运行 start-backend.bat 即可。" -ForegroundColor Yellow

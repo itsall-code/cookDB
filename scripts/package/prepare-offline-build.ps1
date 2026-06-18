@@ -16,7 +16,7 @@
     只生成目录，不压缩。
 
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File scripts\prepare-offline-build.ps1
+    powershell -ExecutionPolicy Bypass -File scripts\package\prepare-offline-build.ps1
 #>
 [CmdletBinding()]
 param(
@@ -26,10 +26,32 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
+function Resolve-RepoRoot {
+    $root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
+    return $root.Path
+}
+
+function Resolve-OutRoot([string]$PathValue) {
+    if ([System.IO.Path]::IsPathRooted($PathValue)) {
+        return $PathValue
+    }
+    return Join-Path $repoRoot $PathValue
+}
+
+function Assert-Command([string]$Name) {
+    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
+        throw "未找到命令: $Name。请先安装并加入 PATH。"
+    }
+}
+
+$repoRoot = Resolve-RepoRoot
 $backendDir = Join-Path $repoRoot "backend"
-$stageDir = Join-Path $repoRoot "$OutDir\cook-db-offline-build"
+$outRoot = Resolve-OutRoot $OutDir
+$stageDir = Join-Path $outRoot "cook-db-offline-build"
 $stageBackend = Join-Path $stageDir "backend"
+
+if (-not (Test-Path $backendDir)) { throw "未找到后端目录: $backendDir" }
+Assert-Command "cargo"
 
 Write-Host "[1/5] 清理输出目录..." -ForegroundColor Cyan
 if (Test-Path $stageDir) { Remove-Item $stageDir -Recurse -Force }
@@ -136,7 +158,7 @@ Set-Content -Path (Join-Path $stageDir "README-offline-build.txt") -Value $readm
 $vendorSize = "{0:N0} MB" -f ((Get-ChildItem $vendorDir -Recurse -File | Measure-Object Length -Sum).Sum / 1MB)
 
 if (-not $NoZip) {
-    $zipPath = Join-Path $repoRoot "$OutDir\cook-db-offline-build.zip"
+    $zipPath = Join-Path $outRoot "cook-db-offline-build.zip"
     if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
     Compress-Archive -Path $stageDir -DestinationPath $zipPath
 }
@@ -144,7 +166,7 @@ if (-not $NoZip) {
 Write-Host ""
 Write-Host "完成！" -ForegroundColor Green
 Write-Host "  目录: $stageDir"
-if (-not $NoZip) { Write-Host "  压缩: $(Join-Path $repoRoot "$OutDir\cook-db-offline-build.zip")" }
+if (-not $NoZip) { Write-Host "  压缩: $zipPath" }
 Write-Host "  vendor 大小: $vendorSize"
 Write-Host ""
 Write-Host "下一步：另外准备 Rust GNU 独立安装包（见 README-offline-build.txt），一并拷入内网。" -ForegroundColor Yellow
