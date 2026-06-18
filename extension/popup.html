@@ -25,6 +25,7 @@
     <div class="app-tabs" role="tablist" aria-label="工具类别">
       <button type="button" class="active" data-app-tab="redis" role="tab" aria-selected="true">Redis 工具</button>
       <button type="button" data-app-tab="mysql" role="tab" aria-selected="false">MySQL 工作台</button>
+      <button type="button" data-app-tab="update" role="tab" aria-selected="false">更新信息</button>
     </div>
 
     <section class="log-panel" id="logPanel" aria-label="运行日志">
@@ -567,6 +568,98 @@
               <div id="importPreview" class="subtitle" style="margin-top:12px;color:#94a3b8;"></div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- ========================= 更新信息面板 ========================= -->
+      <div id="tab-app-update" class="app-tab-panel">
+        <section class="popup-hero popup-hero--update snap-section" aria-label="更新信息模板">
+          <div class="popup-hero__copy">
+            <p class="eyebrow">Update Note</p>
+            <h2>记录一次更新，复制标准格式</h2>
+            <p>按固定模板填写客户端、服务端与版本信息，一键复制到剪贴板。</p>
+          </div>
+          <div class="popup-hero__flow" aria-label="更新信息流程">
+            <span>填写信息</span>
+            <span>确认预览</span>
+            <span>复制发送</span>
+          </div>
+        </section>
+
+        <div class="section update-template-section snap-section">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Template</p>
+              <h2>更新信息模板</h2>
+              <div class="small">字段会实时生成下方文本，复制内容保持固定换行格式。</div>
+            </div>
+            <button id="updateNowBtn" class="secondary small-btn" type="button">当前时间</button>
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <label for="updateTime">更新时间</label>
+              <input id="updateTime" type="text" placeholder="2026-06-17 21:55:33" />
+            </div>
+            <div class="col">
+              <label for="updateChannel">客户端更新渠道</label>
+              <input id="updateChannel" type="text" placeholder="微小" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <label for="updateConfigResource">客户端配置+资源</label>
+              <select id="updateConfigResource">
+                <option value="已更新">已更新</option>
+                <option value="无">无</option>
+              </select>
+            </div>
+            <div class="col">
+              <label for="updateClientCode">客户端代码</label>
+              <select id="updateClientCode">
+                <option value="已更新">已更新</option>
+                <option value="无">无</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <label for="updateServer">服务端更新</label>
+              <select id="updateServer">
+                <option value="无">无</option>
+                <option value="已更新">已更新</option>
+              </select>
+            </div>
+            <div class="col">
+              <label for="updateVersion">版本号</label>
+              <input id="updateVersion" type="text" placeholder="9.9.9" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <label for="updateReason">更新原因</label>
+              <textarea id="updateReason" class="update-reason-input" placeholder="修复齐麟新手剧情飞剑、镇邪官外观闪烁等报错"></textarea>
+            </div>
+          </div>
+
+          <div class="update-actions">
+            <button id="copyUpdateInfoBtn" type="button">复制更新信息</button>
+            <button id="resetUpdateTemplateBtn" class="secondary" type="button">恢复示例</button>
+          </div>
+          <div id="updateCopyStatus" class="small update-copy-status" aria-live="polite"></div>
+        </div>
+
+        <div class="section update-preview-section snap-section">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Preview</p>
+              <h2>复制预览</h2>
+            </div>
+          </div>
+          <pre id="updatePreview" class="update-preview"></pre>
         </div>
       </div>
     </main>

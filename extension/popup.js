@@ -47,9 +47,32 @@ const els = {
   viewFieldBtn: $("viewFieldBtn"),
   flushBtn: $("flushBtn"),
   envSummary: $("envSummary"),
+
+  updateTime: $("updateTime"),
+  updateChannel: $("updateChannel"),
+  updateConfigResource: $("updateConfigResource"),
+  updateClientCode: $("updateClientCode"),
+  updateServer: $("updateServer"),
+  updateVersion: $("updateVersion"),
+  updateReason: $("updateReason"),
+  updatePreview: $("updatePreview"),
+  updateCopyStatus: $("updateCopyStatus"),
+  updateNowBtn: $("updateNowBtn"),
+  copyUpdateInfoBtn: $("copyUpdateInfoBtn"),
+  resetUpdateTemplateBtn: $("resetUpdateTemplateBtn"),
+  toast: $("toast"),
 };
 
 let appState = { settings: { envs: {} }, activeEnv: "dev" };
+
+const UPDATE_TEMPLATE_DEFAULTS = {
+  channel: "微小",
+  configResource: "已更新",
+  clientCode: "已更新",
+  server: "无",
+  version: "9.9.9",
+  reason: "更新外网主干",
+};
 
 function defaultEnv() {
   return {
@@ -80,6 +103,17 @@ function nowTime() {
   return new Date().toLocaleTimeString();
 }
 
+function formatDateTime(date = new Date()) {
+  const pad = (value) => String(value).padStart(2, "0");
+  const datePart = [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+  ].join("-");
+  const timePart = `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  return `${datePart} ${timePart}`;
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -100,6 +134,16 @@ function appendLog(message, level = "info") {
 
   row.textContent = `[${nowTime()}] ${safeMessage}`;
   els.logBox.prepend(row);
+}
+
+function showPopupToast(message, ok = true) {
+  if (!els.toast) return;
+  els.toast.textContent = message;
+  els.toast.className = `wb-toast show ${ok ? "ok" : "error"}`;
+  clearTimeout(showPopupToast._timer);
+  showPopupToast._timer = setTimeout(() => {
+    els.toast.classList.remove("show");
+  }, 2400);
 }
 
 function clearLog() {
@@ -448,6 +492,84 @@ function renderViewer(data) {
     <div class="viewer-title">读取结果</div>
     <pre class="viewer-pre">${escapeHtml(pretty)}</pre>
   `;
+}
+
+function getUpdateValue(element, fallback = "") {
+  return String(element?.value || fallback).trim();
+}
+
+function buildUpdateInfoText() {
+  return [
+    `更新时间: ${getUpdateValue(els.updateTime, formatDateTime())}`,
+    `客户端更新渠道：${getUpdateValue(els.updateChannel, UPDATE_TEMPLATE_DEFAULTS.channel)}`,
+    `客户端配置+资源：${getUpdateValue(els.updateConfigResource, UPDATE_TEMPLATE_DEFAULTS.configResource)}`,
+    `客户端代码：${getUpdateValue(els.updateClientCode, UPDATE_TEMPLATE_DEFAULTS.clientCode)}`,
+    `服务端更新：${getUpdateValue(els.updateServer, UPDATE_TEMPLATE_DEFAULTS.server)}`,
+    `版本号： ${getUpdateValue(els.updateVersion, UPDATE_TEMPLATE_DEFAULTS.version)}`,
+    `更新原因：${getUpdateValue(els.updateReason, UPDATE_TEMPLATE_DEFAULTS.reason)}`,
+    "---",
+  ].join("\n");
+}
+
+function renderUpdatePreview() {
+  if (!els.updatePreview) return;
+  els.updatePreview.textContent = buildUpdateInfoText();
+}
+
+function setUpdateCopyStatus(text, ok = true) {
+  if (!els.updateCopyStatus) return;
+  els.updateCopyStatus.textContent = text;
+  els.updateCopyStatus.classList.toggle("is-error", !ok);
+}
+
+function fillUpdateTemplateDefaults(useCurrentTime = true) {
+  if (els.updateTime) els.updateTime.value = useCurrentTime ? formatDateTime() : "2026-06-17 21:55:33";
+  if (els.updateChannel) els.updateChannel.value = UPDATE_TEMPLATE_DEFAULTS.channel;
+  if (els.updateConfigResource) els.updateConfigResource.value = UPDATE_TEMPLATE_DEFAULTS.configResource;
+  if (els.updateClientCode) els.updateClientCode.value = UPDATE_TEMPLATE_DEFAULTS.clientCode;
+  if (els.updateServer) els.updateServer.value = UPDATE_TEMPLATE_DEFAULTS.server;
+  if (els.updateVersion) els.updateVersion.value = UPDATE_TEMPLATE_DEFAULTS.version;
+  if (els.updateReason) els.updateReason.value = UPDATE_TEMPLATE_DEFAULTS.reason;
+  setUpdateCopyStatus("");
+  renderUpdatePreview();
+}
+
+async function writeClipboardText(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (_) {
+      // Some extension/browser contexts expose the API but deny permission.
+      // Fall through to the user-gesture based copy command below.
+    }
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("浏览器拒绝写入剪贴板");
+}
+
+async function copyUpdateInfo() {
+  await withButtonLoading(els.copyUpdateInfoBtn, async () => {
+    try {
+      const text = buildUpdateInfoText();
+      await writeClipboardText(text);
+      setUpdateCopyStatus("已复制到剪贴板", true);
+      showPopupToast("更新信息已复制");
+    } catch (error) {
+      const message = error.message || "复制失败";
+      setUpdateCopyStatus(message, false);
+      showPopupToast(message, false);
+    }
+  }, "复制中...");
 }
 
 function toggleViewerSection() {
@@ -833,10 +955,29 @@ function bindEvents() {
   els.viewFieldBtn?.addEventListener("click", viewField);
   els.flushBtn?.addEventListener("click", flushDb);
   els.toggleViewerSectionBtn?.addEventListener("click", toggleViewerSection);
+  els.updateNowBtn?.addEventListener("click", () => {
+    if (els.updateTime) els.updateTime.value = formatDateTime();
+    renderUpdatePreview();
+  });
+  els.copyUpdateInfoBtn?.addEventListener("click", copyUpdateInfo);
+  els.resetUpdateTemplateBtn?.addEventListener("click", () => fillUpdateTemplateDefaults(true));
+  [
+    els.updateTime,
+    els.updateChannel,
+    els.updateConfigResource,
+    els.updateClientCode,
+    els.updateServer,
+    els.updateVersion,
+    els.updateReason,
+  ].forEach((field) => {
+    field?.addEventListener("input", renderUpdatePreview);
+    field?.addEventListener("change", renderUpdatePreview);
+  });
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
   bindEvents();
+  fillUpdateTemplateDefaults(true);
   const firstTab = await initTabOrdering(document.querySelector(".app-tabs"));
   if (firstTab) setAppTab(firstTab);
 
