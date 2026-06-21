@@ -22,24 +22,6 @@
         <div id="connectionMeta" class="wb-connection-meta"></div>
       </div>
 
-      <div class="wb-design-panel" aria-label="操作设计原则">
-        <div>
-          <span>01</span>
-          <strong>只读先行</strong>
-          <small>查询默认限流</small>
-        </div>
-        <div>
-          <span>02</span>
-          <strong>变更确认</strong>
-          <small>DDL / DML 二次审阅</small>
-        </div>
-        <div>
-          <span>03</span>
-          <strong>批量可追踪</strong>
-          <small>导入与清库留痕</small>
-        </div>
-      </div>
-
       <div class="wb-sidebar-footer">
         <a href="options.html" target="_blank" rel="noopener noreferrer">管理连接与环境</a>
         <a href="popup.html" target="_blank" rel="noopener noreferrer">返回 Redis 面板</a>
@@ -58,24 +40,6 @@
           <span id="statusText">就绪</span>
         </div>
       </div>
-
-      <section class="wb-command-grid" aria-label="操作路径">
-        <article class="wb-command-card wb-command-card--query">
-          <span>SELECT</span>
-          <strong>安全查询路径</strong>
-          <p>默认 LIMIT 200，结果表格支持前端分页与 CSV 导出。</p>
-        </article>
-        <article class="wb-command-card wb-command-card--import">
-          <span>STREAM</span>
-          <strong>SQL 文件导入</strong>
-          <p>大文件交给后端流式解析，避免浏览器内存压力。</p>
-        </article>
-        <article class="wb-command-card wb-command-card--danger">
-          <span>REVIEW</span>
-          <strong>危险操作审阅</strong>
-          <p>清库、DDL 与 DML 保持独立入口，并通过历史复盘。</p>
-        </article>
-      </section>
 
       <section class="wb-card wb-history-section">
         <div class="wb-history-section-head">

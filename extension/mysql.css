@@ -379,9 +379,9 @@ body {
 
 /* —— Main —— */
 .wb-main {
-  padding: 24px 28px 32px;
+  padding: 20px 24px 28px;
   display: grid;
-  gap: 18px;
+  gap: 14px;
   align-content: start;
 }
 
@@ -457,14 +457,13 @@ body {
   }
 }
 
-/* —— Card & tabs —— */
+/* —— Work panels & tabs —— */
 .wb-card {
   background: var(--wb-surface);
   border: 1px solid var(--wb-border);
-  border-radius: var(--wb-radius);
+  border-radius: var(--wb-radius-sm);
   box-shadow: var(--wb-shadow);
   overflow: hidden;
-  border-top: 3px solid var(--product-mysql);
 }
 
 .wb-tabs {
@@ -1664,44 +1663,6 @@ button.wb-batch-toggle:active {
   transform: none;
 }
 
-/* —— DESIGN.md-inspired operation overview —— */
-.wb-design-panel {
-  display: grid;
-  gap: 8px;
-}
-
-.wb-design-panel div {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 2px 10px;
-  align-items: center;
-  min-height: 58px;
-  padding: 10px 11px;
-  border: 1px solid var(--hc-hairline);
-  border-radius: var(--wb-radius-sm);
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.wb-design-panel span {
-  grid-row: span 2;
-  color: var(--product-mysql);
-  font-family: var(--wb-mono);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.wb-design-panel strong {
-  color: var(--hc-ink);
-  font-size: 13px;
-  line-height: 1.25;
-}
-
-.wb-design-panel small {
-  color: var(--hc-ink-subtle);
-  font-size: 11px;
-  line-height: 1.35;
-}
-
 .wb-topbar .eyebrow {
   margin: 0 0 6px;
   color: var(--product-mysql);
@@ -1709,84 +1670,6 @@ button.wb-batch-toggle:active {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-}
-
-.wb-command-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.wb-command-card {
-  position: relative;
-  overflow: hidden;
-  min-height: 138px;
-  padding: 18px;
-  border: 1px solid var(--hc-hairline);
-  border-radius: var(--wb-radius);
-  background:
-    radial-gradient(circle at 88% 4%, rgba(255, 255, 255, 0.12), transparent 30%),
-    linear-gradient(135deg, var(--hc-surface-1), var(--hc-canvas));
-  color: var(--hc-ink);
-}
-
-.wb-command-card::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: var(--wb-rail);
-  background: var(--product-mysql);
-}
-
-.wb-command-card--query::before {
-  background: var(--product-backend);
-}
-
-.wb-command-card--danger::before {
-  background: var(--wb-danger);
-}
-
-.wb-command-card span,
-.wb-command-card strong,
-.wb-command-card p {
-  position: relative;
-  z-index: 1;
-}
-
-.wb-command-card span {
-  display: inline-flex;
-  width: max-content;
-  margin-bottom: 16px;
-  padding: 4px 8px;
-  border: 1px solid var(--hc-hairline-strong);
-  border-radius: 999px;
-  color: var(--hc-ink-muted);
-  font-family: var(--wb-mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-.wb-command-card strong {
-  display: block;
-  margin-bottom: 8px;
-  color: var(--hc-ink);
-  font-size: 17px;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
-}
-
-.wb-command-card p {
-  margin: 0;
-  color: var(--hc-ink-muted);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-@media (max-width: 1080px) {
-  .wb-command-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* ===== Qt desktop workbench refresh ===== */
