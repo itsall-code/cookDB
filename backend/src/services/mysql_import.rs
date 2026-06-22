@@ -599,18 +599,12 @@ async fn import_via_sqlx(
     }
 
     if buf_pos < buffer.len() {
-        let tail = std::str::from_utf8(&buffer[buf_pos..])
-            .context("sql file contains invalid utf-8 at tail")?
-            .trim();
-        // Tail may only contain mysqldump session-restore comments (e.g. /*!40103 SET ... */;).
-        // Strip a leading conditional comment wrapper before deciding whether it is executable.
-        let sql = normalize_executable_statement(strip_versioned_comment(tail));
-        if !sql.is_empty() && !should_skip_statement(&sql) {
+        if let Some(sql) = decode_import_tail(&buffer[buf_pos..])? {
             execute_import_statement(
                 &mut conn,
                 &inner,
                 job_id,
-                sql.to_string(),
+                sql,
                 &mut in_tx,
                 &mut tx_count,
                 &mut batch_no,
@@ -788,6 +782,22 @@ async fn apply_import_session_tuning(conn: &mut sqlx::MySqlConnection) -> anyhow
     Ok(())
 }
 
+fn decode_import_tail(raw: &[u8]) -> anyhow::Result<Option<String>> {
+    let tail = String::from_utf8_lossy(raw);
+    // Tail may only contain mysqldump session-restore comments (e.g. /*!40103 SET ... */;).
+    // Strip a leading conditional comment wrapper before deciding whether it is executable.
+    let sql = normalize_executable_statement(strip_versioned_comment(tail.trim()));
+    if sql.is_empty() || should_skip_statement(&sql) {
+        return Ok(None);
+    }
+
+    if tail.contains(char::REPLACEMENT_CHARACTER) {
+        bail!("sql file contains invalid utf-8 in final unterminated statement");
+    }
+
+    Ok(Some(sql))
+}
+
 fn is_ddl_statement(sql: &str) -> bool {
     let upper = sql.trim_start().to_ascii_uppercase();
     upper.starts_with("CREATE")
@@ -851,10 +861,7 @@ fn strip_inline_comments(sql: &str) -> String {
 /// Strip leading mysqldump version digits accidentally included in conditional comments.
 fn normalize_dump_statement(sql: &str) -> String {
     let trimmed = sql.trim_start();
-    let digit_len = trimmed
-        .chars()
-        .take_while(|ch| ch.is_ascii_digit())
-        .count();
+    let digit_len = trimmed.chars().take_while(|ch| ch.is_ascii_digit()).count();
     if digit_len > 0 {
         let rest = trimmed[digit_len..].trim_start();
         if rest.len() < trimmed.len() {
@@ -877,7 +884,9 @@ fn strip_versioned_comment(sql: &str) -> &str {
     if let Some(rest) = trimmed.strip_prefix("/*!") {
         if let Some(end) = rest.find("*/") {
             let inner = rest[..end].trim_start();
-            let inner = inner.trim_start_matches(|c: char| c.is_ascii_digit()).trim();
+            let inner = inner
+                .trim_start_matches(|c: char| c.is_ascii_digit())
+                .trim();
             return inner.trim_end_matches(';').trim();
         }
     }
@@ -1040,8 +1049,12 @@ mod tests {
 
     #[test]
     fn skips_mysqldump_footer_comment_line() {
-        assert!(should_skip_statement("-- Dump completed on 2026-06-06  3:00:51"));
-        assert!(normalize_executable_statement("-- Dump completed on 2026-06-06  3:00:51").is_empty());
+        assert!(should_skip_statement(
+            "-- Dump completed on 2026-06-06  3:00:51"
+        ));
+        assert!(
+            normalize_executable_statement("-- Dump completed on 2026-06-06  3:00:51").is_empty()
+        );
     }
 
     #[test]
@@ -1049,6 +1062,22 @@ mod tests {
         let raw = b"INSERT INTO t (c) VALUES ('a--b');\n";
         let (stmt, _) = extract_next_statement(raw).expect("statement");
         assert_eq!(stmt, "INSERT INTO t (c) VALUES ('a--b')");
+    }
+
+    #[test]
+    fn ignores_invalid_utf8_in_non_executable_tail() {
+        let raw = b"; -- Dump completed on 2026-06-06 3:00:51\xff\n";
+        assert!(decode_import_tail(raw).expect("tail decode").is_none());
+    }
+
+    #[test]
+    fn rejects_invalid_utf8_in_executable_tail() {
+        let raw = b"INSERT INTO t (c) VALUES ('bad\xff')";
+        let err = decode_import_tail(raw).expect_err("invalid executable tail");
+        assert!(
+            err.to_string()
+                .contains("invalid utf-8 in final unterminated statement")
+        );
     }
 
     #[test]
