@@ -879,11 +879,6 @@ function fillSelect(select, options, placeholder) {
   if (current && options.includes(current)) select.value = current;
 }
 
-function clearLookupKeyValue() {
-  const keyInput = $("lookupKeyValue");
-  if (keyInput) keyInput.value = "";
-}
-
 function getLookupPrefs() {
   return {
     table: $("lookupTable")?.value || "",
@@ -905,27 +900,12 @@ async function applyLookupCache() {
   if (!conn) return;
 
   const cached = await loadMysqlLookupCache(conn.id);
-  clearLookupKeyValue();
 
   const tableSelect = $("lookupTable");
   if (!cached?.table || !tableSelect || !lookupTables.includes(cached.table)) return;
 
   tableSelect.value = cached.table;
   await loadLookupColumns(cached.table, cached);
-  clearLookupKeyValue();
-}
-
-function resetLookupForm() {
-  lookupTables = [];
-  fillSelect($("lookupTable"), [], "请选择表");
-  fillSelect($("lookupKeyColumn"), [], "请选择列");
-  fillSelect($("lookupValueColumn"), [], "请选择列");
-  clearLookupKeyValue();
-  const result = $("lookupResult");
-  if (result) {
-    result.className = "wb-lookup-result wb-empty";
-    result.textContent = "查询结果将显示在这里";
-  }
 }
 
 function renderLookupResult(data) {
@@ -1177,6 +1157,7 @@ async function refreshLookupTables() {
   const conn = getActiveConnection();
   if (!conn) return showToast("请先在设置页添加 MySQL 连接", false);
 
+  const currentPrefs = getLookupPrefs();
   setStatus("加载表列表...", "busy");
   try {
     const payload = await apiFetch(appState, "/api/mysql/tables", {
@@ -1187,13 +1168,17 @@ async function refreshLookupTables() {
     fillSelect($("lookupTable"), lookupTables, "请选择表");
     fillSelect($("lookupKeyColumn"), [], "请选择列");
     fillSelect($("lookupValueColumn"), [], "请选择列");
-    renderLookupResult({ values: [], row_count: 0 });
     if (!lookupTables.length) {
       showToast("当前库没有表", false);
       setStatus("无可用表", "error");
       return;
     }
-    await applyLookupCache();
+    if (currentPrefs.table && lookupTables.includes(currentPrefs.table)) {
+      $("lookupTable").value = currentPrefs.table;
+      await loadLookupColumns(currentPrefs.table, currentPrefs);
+    } else {
+      await applyLookupCache();
+    }
     setStatus(`已加载 ${lookupTables.length} 张表`, "ok");
     showToast(`已加载 ${lookupTables.length} 张表`);
   } catch (err) {
@@ -1236,7 +1221,6 @@ async function loadLookupColumns(table, preferred = null) {
       valueSelect.value = columns[0];
     }
 
-    clearLookupKeyValue();
     $("lookupKeyValue")?.focus();
   } catch (err) {
     showToast(err.message, false);
@@ -1893,10 +1877,6 @@ function bindEvents() {
     await chrome.storage.local.set({ mysqlActiveConnectionId: appState.mysqlActiveConnectionId });
     renderConnections();
     seedQueryEditor();
-    resetLookupForm();
-    if (activeTab === "lookup") {
-      await refreshLookupTables();
-    }
   });
 
   els.historyFavoriteOnly.addEventListener("change", renderHistory);

@@ -1015,6 +1015,14 @@ button:disabled {
   gap: var(--s-3);
 }
 
+#tab-app-mysql .wb-lookup-actions {
+  justify-content: space-between;
+}
+
+#tab-app-mysql .wb-lookup-actions #refreshLookupBtn {
+  margin-left: auto;
+}
+
 #tab-app-mysql .wb-lookup-result {
   margin-top: var(--s-3);
   min-height: 72px;

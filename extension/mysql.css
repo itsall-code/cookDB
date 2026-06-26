@@ -560,6 +560,14 @@ body {
   align-items: center;
 }
 
+.wb-lookup-actions {
+  justify-content: space-between;
+}
+
+.wb-lookup-actions #refreshLookupBtn {
+  margin-left: auto;
+}
+
 .wb-actions button,
 .wb-card button.primary,
 .wb-card button.secondary,
