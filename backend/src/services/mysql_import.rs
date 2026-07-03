@@ -365,12 +365,23 @@ async fn run_import(
     let use_cli = std::env::var("COOK_MYSQL_USE_CLI")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
+    let has_non_utf8_bytes = file_contains_invalid_utf8(&path).await?;
+    let prefer_cli = use_cli || has_non_utf8_bytes;
 
-    if use_cli && mysql_cli_available().await {
-        info!(job_id = %job_id, "mysql import using mysql client (stdin pipe, COOK_MYSQL_USE_CLI=1)");
+    if prefer_cli && mysql_cli_available().await {
+        let reason = if has_non_utf8_bytes {
+            "sql file contains non-utf8 bytes"
+        } else {
+            "COOK_MYSQL_USE_CLI=1"
+        };
+        info!(job_id = %job_id, reason, "mysql import using mysql client (stdin pipe)");
         match import_via_mysql_cli(&cfg, &path, inner.clone(), &job_id, started).await {
             Ok(()) => return Ok(()),
             Err(err) => {
+                if has_non_utf8_bytes {
+                    return Err(err)
+                        .context("mysql client import failed for SQL file with non-UTF-8 bytes");
+                }
                 error!(
                     job_id = %job_id,
                     error = %err,
@@ -378,6 +389,11 @@ async fn run_import(
                 );
             }
         }
+    } else if has_non_utf8_bytes {
+        bail!(
+            "sql file contains non-UTF-8 bytes, likely from mysqldump _binary literals. \
+             Install the mysql client or add it to PATH so Cook-DB can import this file safely."
+        );
     } else {
         info!(
             job_id = %job_id,
@@ -397,6 +413,42 @@ async fn mysql_cli_available() -> bool {
         .await
         .map(|s| s.success())
         .unwrap_or(false)
+}
+
+async fn file_contains_invalid_utf8(path: &Path) -> anyhow::Result<bool> {
+    let file = File::open(path)
+        .await
+        .with_context(|| format!("failed to open {}", path.display()))?;
+    let mut reader = BufReader::with_capacity(READ_CHUNK_SIZE, file);
+    let mut pending = Vec::new();
+
+    loop {
+        let mut chunk = vec![0u8; READ_CHUNK_SIZE];
+        let read = reader.read(&mut chunk).await?;
+        if read == 0 {
+            return Ok(!pending.is_empty());
+        }
+
+        if chunk_contains_invalid_utf8(&mut pending, &chunk[..read]) {
+            return Ok(true);
+        }
+    }
+}
+
+fn chunk_contains_invalid_utf8(pending: &mut Vec<u8>, chunk: &[u8]) -> bool {
+    let mut bytes = Vec::with_capacity(pending.len() + chunk.len());
+    bytes.append(pending);
+    bytes.extend_from_slice(chunk);
+
+    match std::str::from_utf8(&bytes) {
+        Ok(_) => false,
+        Err(err) if err.error_len().is_some() => true,
+        Err(err) => {
+            let valid_up_to = err.valid_up_to();
+            pending.extend_from_slice(&bytes[valid_up_to..]);
+            false
+        }
+    }
 }
 
 async fn import_via_mysql_cli(
@@ -1090,6 +1142,35 @@ mod tests {
         assert!(extract_next_statement(rest).is_none());
         assert!(should_skip_statement(
             std::str::from_utf8(rest).unwrap().trim()
+        ));
+    }
+
+    #[test]
+    fn utf8_scan_allows_multibyte_text() {
+        let mut pending = Vec::new();
+        assert!(!chunk_contains_invalid_utf8(
+            &mut pending,
+            "INSERT INTO t VALUES ('镇邪人');".as_bytes()
+        ));
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn utf8_scan_allows_split_multibyte_sequence() {
+        let text = "镇".as_bytes();
+        let mut pending = Vec::new();
+        assert!(!chunk_contains_invalid_utf8(&mut pending, &text[..1]));
+        assert_eq!(pending, text[..1]);
+        assert!(!chunk_contains_invalid_utf8(&mut pending, &text[1..]));
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn utf8_scan_detects_binary_literal_bytes() {
+        let mut pending = Vec::new();
+        assert!(chunk_contains_invalid_utf8(
+            &mut pending,
+            b"INSERT INTO t VALUES (_binary '\xff');"
         ));
     }
 }

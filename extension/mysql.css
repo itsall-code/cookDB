@@ -179,6 +179,19 @@ body {
   margin-bottom: 10px;
 }
 
+.wb-history-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wb-history-actions button.secondary {
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
 .wb-history-section-head h3 {
   margin: 0 0 4px;
   font-size: 16px;
@@ -283,6 +296,12 @@ body {
   color: #c2410c;
   background: #ffedd5;
   border: 1px solid #fdba74;
+}
+
+.wb-history-type--template {
+  color: #7c3aed;
+  background: #ede9fe;
+  border: 1px solid #c4b5fd;
 }
 
 .wb-history-conn {

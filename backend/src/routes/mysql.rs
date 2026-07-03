@@ -10,11 +10,12 @@ use crate::{
         mysql::MySqlConfig,
         request::{
             MySqlColumnsRequest, MySqlExecuteRequest, MySqlFlushDbRequest, MySqlImportFileRequest,
-            MySqlImportJobRequest, MySqlLookupRequest, MySqlQueryRequest, MySqlTableListRequest,
+            MySqlImportJobRequest, MySqlLookupRequest, MySqlQueryRequest, MySqlScriptRequest,
+            MySqlTableListRequest,
         },
         response::ApiResponse,
     },
-    services::{mysql_import, mysql_service},
+    services::{mysql_import, mysql_scripts, mysql_service},
     utils::log_util::mysql_target,
 };
 
@@ -29,6 +30,8 @@ pub fn routes() -> Router {
         .route("/api/mysql/execute", post(execute_statement))
         .route("/api/mysql/flush-db", post(flush_database))
         .route("/api/mysql/sql-files", get(list_sql_files))
+        .route("/api/mysql/scripts", get(list_scripts))
+        .route("/api/mysql/script", post(read_script))
         .route("/api/mysql/import-file", post(start_import_file))
         .route("/api/mysql/import-file/status", post(import_file_status))
         .route("/api/mysql/import-file/cancel", post(cancel_import_file))
@@ -153,6 +156,24 @@ async fn list_sql_files() -> Result<Json<ApiResponse<Vec<mysql_import::SqlFileEn
     Ok(Json(ApiResponse::ok_with_message(
         files,
         "Listed SQL files in data directory".to_string(),
+    )))
+}
+
+async fn list_scripts() -> Result<Json<ApiResponse<Vec<mysql_scripts::SqlScriptEntry>>>, AppError> {
+    let files = mysql_scripts::list_scripts().await?;
+    Ok(Json(ApiResponse::ok_with_message(
+        files,
+        "Listed SQL scripts".to_string(),
+    )))
+}
+
+async fn read_script(
+    Json(req): Json<MySqlScriptRequest>,
+) -> Result<Json<ApiResponse<mysql_scripts::SqlScriptContent>>, AppError> {
+    let script = mysql_scripts::read_script(&req.file_path).await?;
+    Ok(Json(ApiResponse::ok_with_message(
+        script,
+        "Loaded SQL script".to_string(),
     )))
 }
 

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use anyhow::Context;
 use base64::{Engine as _, engine::general_purpose};
 use redis::{AsyncCommands, aio::MultiplexedConnection};
@@ -222,15 +220,6 @@ pub async fn set_hash_fields_bytes_pipeline(
     Ok(())
 }
 
-pub async fn get_hash_field_raw(
-    cfg: &RedisConfig,
-    hash_name: &str,
-    field: &str,
-) -> anyhow::Result<String> {
-    let bytes = get_hash_field_bytes(cfg, hash_name, field).await?;
-    Ok(general_purpose::STANDARD.encode(bytes))
-}
-
 pub async fn set_hash_field_raw(
     cfg: &RedisConfig,
     hash_name: &str,
@@ -284,13 +273,4 @@ pub async fn get_hash_field_visualized(
         decoded_json: None,
         decoded_text: None,
     })
-}
-
-pub async fn get_hash_all_as_map(
-    cfg: &RedisConfig,
-    hash_name: &str,
-) -> anyhow::Result<HashMap<String, Vec<u8>>> {
-    let mut conn = create_connection(cfg).await?;
-    let map: HashMap<String, Vec<u8>> = conn.hgetall(hash_name).await?;
-    Ok(map)
 }

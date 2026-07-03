@@ -82,6 +82,7 @@ let batchSaveHintTimer = null;
 let batchFlushSaveHintTimer = null;
 let lookupTables = [];
 let sqlFileList = [];
+let sqlScriptList = [];
 
 function getImportPath() {
   const custom = els.importPath?.value.trim();
@@ -195,8 +196,33 @@ function getEditor(id) {
 }
 
 function getEditorSql(id) {
-  const raw = getEditor(id)?.value.trim() || "";
-  return raw.replace(/;\s*$/, "");
+  const editor = getEditor(id);
+  if (!editor) return "";
+  const selected = editor.selectionStart !== editor.selectionEnd
+    ? editor.value.slice(editor.selectionStart, editor.selectionEnd)
+    : "";
+  const raw = (selected || editor.value).trim();
+  return stripLeadingSqlComments(raw).replace(/;\s*$/, "");
+}
+
+function stripLeadingSqlComments(sql) {
+  let rest = String(sql || "").trimStart();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    if (rest.startsWith("--")) {
+      const nextLine = rest.indexOf("\n");
+      rest = nextLine >= 0 ? rest.slice(nextLine + 1).trimStart() : "";
+      changed = true;
+    } else if (rest.startsWith("/*")) {
+      const end = rest.indexOf("*/");
+      if (end >= 0) {
+        rest = rest.slice(end + 2).trimStart();
+        changed = true;
+      }
+    }
+  }
+  return rest;
 }
 
 function normalizeQueryResult(data) {
@@ -755,6 +781,20 @@ async function loadSqlFiles() {
   }
 }
 
+async function loadSqlScripts() {
+  if (!els.historyList) return;
+
+  try {
+    const payload = await apiFetch(appState, "/api/mysql/scripts", { method: "GET" });
+    sqlScriptList = payload.data || [];
+    renderHistory();
+  } catch (err) {
+    sqlScriptList = [];
+    renderHistory();
+    showToast(`加载 SQL 脚本失败：${err.message}`, false);
+  }
+}
+
 function formatHistoryTime(ts) {
   if (!ts) return "";
   const diff = Date.now() - ts;
@@ -778,60 +818,77 @@ function updateHistoryHint(count) {
   const hint = $("historyHint");
   if (!hint) return;
   hint.textContent = count
-    ? `共 ${count} 条 · 点击卡片复用 · SQL 区可选中复制 · 右键收藏`
-    : "执行查询后会自动记录 · 右键切换收藏";
+    ? `共 ${count} 个脚本 · 点击填入编辑器 · SQL 区可选中复制`
+    : "backend/scripts 下暂无 SQL 脚本";
 }
 
 function renderHistory() {
-  const onlyFavorite = els.historyFavoriteOnly?.checked;
-  let history = dedupeSqlHistoryList(appState?.sqlHistory || []);
-  if (onlyFavorite) history = history.filter((item) => item.favorite);
-  updateHistoryHint(history.length);
+  const templateOnly = els.historyFavoriteOnly?.checked;
+  let scripts = [...sqlScriptList];
+  if (templateOnly) scripts = scripts.filter((item) => item.kind === "template");
+  updateHistoryHint(scripts.length);
 
   if (!els.historyList) return;
   els.historyList.innerHTML = "";
 
-  if (!history.length) {
-    els.historyList.innerHTML = '<div class="wb-history-empty">暂无历史记录</div>';
+  if (!scripts.length) {
+    els.historyList.innerHTML = '<div class="wb-history-empty">暂无 SQL 脚本</div>';
     return;
   }
 
   const frag = document.createDocumentFragment();
-  history.slice(0, 50).forEach((item) => {
+  scripts.forEach((item) => {
     const row = document.createElement("div");
-    const typeLabel = item.type === "execute" ? "执行" : "查询";
-    const typeClass = item.type === "execute" ? "execute" : "query";
-    const stats = formatHistoryStats(item);
-    row.className = `wb-history-item${item.favorite ? " is-favorite" : ""}`;
-    row.title = item.sql;
+    const isTemplate = item.kind === "template";
+    const typeLabel = isTemplate ? "模板" : item.kind === "audit" ? "巡检" : "工具";
+    const typeClass = isTemplate ? "template" : "query";
+    row.className = "wb-history-item";
+    row.title = item.path;
     row.innerHTML = `
       <div class="wb-history-head">
         <span class="wb-history-type wb-history-type--${typeClass}">${typeLabel}</span>
-        <span class="wb-history-conn">${escapeHtml(item.connectionName || "未命名")}</span>
-        <span class="wb-history-time">${formatHistoryTime(item.executedAt)}</span>
-        <span class="wb-history-star" aria-hidden="true">${item.favorite ? "★" : "☆"}</span>
+        <span class="wb-history-conn">${escapeHtml(item.name || item.path)}</span>
+        <span class="wb-history-time">${formatBytes(item.size)}</span>
       </div>
-      <div class="sql-preview"><pre class="wb-history-sql">${escapeHtml(item.sql)}</pre></div>
-      ${stats ? `<div class="wb-history-stats">${escapeHtml(stats)}</div>` : ""}
+      <div class="sql-preview"><pre class="wb-history-sql">${escapeHtml(item.path)}</pre></div>
+      <div class="wb-history-stats">${escapeHtml(isTemplate ? "点击加载到执行编辑器" : "点击加载到查询编辑器")}</div>
     `;
-    row.addEventListener("click", (event) => {
+    row.addEventListener("click", async (event) => {
       if (event.target.closest(".wb-history-sql")) return;
-      if (item.type === "execute") {
-        switchTab("execute");
-        const editor = getEditor("executeEditor");
-        if (editor) editor.value = item.sql;
-      } else {
-        switchTab("query");
-        const editor = getEditor("queryEditor");
-        if (editor) editor.value = item.sql;
+      try {
+        const payload = await apiFetch(appState, "/api/mysql/script", {
+          method: "POST",
+          body: JSON.stringify({ file_path: item.path }),
+        });
+        const script = payload.data;
+        if (isTemplate) {
+          switchTab("execute");
+          const editor = getEditor("executeEditor");
+          if (editor) editor.value = script.sql || "";
+        } else {
+          switchTab("query");
+          const editor = getEditor("queryEditor");
+          if (editor) editor.value = script.sql || "";
+        }
+        showToast("已加载 SQL 脚本");
+      } catch (err) {
+        showToast(`加载 SQL 脚本失败：${err.message}`, false);
       }
-      showToast("已填入编辑器");
     });
     row.addEventListener("contextmenu", async (event) => {
       event.preventDefault();
-      appState.sqlHistory = await toggleSqlFavorite(item.id);
-      renderHistory();
-      showToast(appState.sqlHistory.find((h) => h.id === item.id)?.favorite ? "已收藏" : "已取消收藏");
+      try {
+        const payload = await apiFetch(appState, "/api/mysql/script", {
+          method: "POST",
+          body: JSON.stringify({ file_path: item.path }),
+        });
+        switchTab("execute");
+        const editor = getEditor("executeEditor");
+        if (editor) editor.value = payload.data?.sql || "";
+        showToast("已加载到执行编辑器");
+      } catch (err) {
+        showToast(`加载 SQL 脚本失败：${err.message}`, false);
+      }
     });
     frag.appendChild(row);
   });
@@ -1880,6 +1937,7 @@ function bindEvents() {
   });
 
   els.historyFavoriteOnly.addEventListener("change", renderHistory);
+  $("refreshSqlScriptsBtn")?.addEventListener("click", loadSqlScripts);
   els.importPathSelect?.addEventListener("change", renderConnections);
   els.importPath?.addEventListener("input", renderConnections);
   $("refreshSqlFilesBtn")?.addEventListener("click", loadSqlFiles);
@@ -2031,6 +2089,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   renderBatchImportUi();
   renderBatchFlushUi();
   seedQueryEditor();
+  await loadSqlScripts();
   await loadSqlFiles();
   updateImportProgressPanelVisibility(activeTab);
   setStatus("就绪");

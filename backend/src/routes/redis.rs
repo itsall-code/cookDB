@@ -70,7 +70,7 @@ async fn delete_tables(
     Json(req): Json<TableDeleteRequest>,
 ) -> Result<Json<ApiResponse<usize>>, AppError> {
     req.validate_confirm()?;
-    let count = redis_service::delete_keys(&req.target, &req.tables).await?;
+    let count = redis_service::delete_tables(&req.target, &req.tables).await?;
     Ok(Json(ApiResponse::ok_with_message(
         count,
         format!(
