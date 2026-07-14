@@ -276,13 +276,12 @@
 
         <section class="wb-history-section">
           <div class="section-heading">
-            <div><h2>SQL 历史</h2></div>
-            <label class="wb-checkbox">
-              <input id="historyFavoriteOnly" type="checkbox" />
-              仅收藏
-            </label>
+            <div><h2>SQL 工具箱</h2></div>
+            <div class="wb-history-actions">
+              <button type="button" class="secondary" id="refreshSqlScriptsBtn">刷新</button>
+            </div>
           </div>
-          <p id="historyHint" class="wb-history-hint">执行查询后会自动记录 · 右键切换收藏</p>
+          <p id="historyHint" class="wb-history-hint">从 backend/scripts 读取 SQL 排障脚本</p>
           <div id="historyList" class="wb-history-list"></div>
         </section>
 

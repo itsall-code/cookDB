@@ -36,8 +36,33 @@ impl IntoResponse for AppError {
 
 impl From<anyhow::Error> for AppError {
     fn from(err: anyhow::Error) -> Self {
-        AppError::Internal(err.to_string())
+        let msg = err.to_string();
+        if is_bad_request_message(&msg) {
+            AppError::BadRequest(msg)
+        } else {
+            AppError::Internal(msg)
+        }
     }
+}
+
+fn is_bad_request_message(msg: &str) -> bool {
+    let lower = msg.to_ascii_lowercase();
+    [
+        "sql cannot be empty",
+        "only select statements",
+        "only mutation or ddl statements",
+        "dangerous statement blocked",
+        "query must include",
+        "unterminated block comment",
+        "unterminated quoted string",
+        "mysql host cannot be empty",
+        "mysql username cannot be empty",
+        "mysql database must be specified",
+        "identifier cannot be empty",
+        "invalid identifier",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
 }
 
 impl From<redis::RedisError> for AppError {

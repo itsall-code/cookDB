@@ -114,10 +114,12 @@ pub struct BatchLocalizeRequest {
 }
 
 fn is_dangerous_mutation(sql: &str) -> bool {
-    let lower = sql.trim().to_ascii_lowercase();
-    ["delete", "truncate", "drop"]
-        .iter()
-        .any(|prefix| lower.starts_with(prefix))
+    sql.split(';').any(|statement| {
+        let lower = statement.trim().to_ascii_lowercase();
+        ["delete", "truncate", "drop"]
+            .iter()
+            .any(|prefix| lower.starts_with(prefix))
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

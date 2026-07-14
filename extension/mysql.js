@@ -6,6 +6,7 @@ const els = {
   connectionMeta: $("connectionMeta"),
   historyList: $("historyList"),
   historyFavoriteOnly: $("historyFavoriteOnly"),
+  refreshSqlScriptsBtn: $("refreshSqlScriptsBtn"),
   statusPill: $("statusPill"),
   statusText: $("statusText"),
   queryEditor: $("queryEditor"),
@@ -202,7 +203,7 @@ function getEditorSql(id) {
     ? editor.value.slice(editor.selectionStart, editor.selectionEnd)
     : "";
   const raw = (selected || editor.value).trim();
-  return stripLeadingSqlComments(raw).replace(/;\s*$/, "");
+  return stripLeadingSqlComments(raw);
 }
 
 function stripLeadingSqlComments(sql) {
@@ -225,14 +226,49 @@ function stripLeadingSqlComments(sql) {
   return rest;
 }
 
+function stripSqlComments(sql) {
+  return String(sql || "")
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("--"))
+    .join("\n")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
+function hasExecutableMutation(sql) {
+  return stripSqlComments(sql)
+    .split(";")
+    .some((statement) => {
+      const trimmed = statement.trim().toLowerCase();
+      return ["insert", "update", "delete", "replace", "create", "alter", "drop", "truncate"].some((p) =>
+        trimmed.startsWith(p)
+      );
+    });
+}
+
+function loadScriptIntoEditor(script, forceExecute = false) {
+  const sql = script?.sql || "";
+  const execute = forceExecute || hasExecutableMutation(sql);
+  switchTab(execute ? "execute" : "query");
+  const editor = getEditor(execute ? "executeEditor" : "queryEditor");
+  if (editor) editor.value = sql;
+}
+
 function normalizeQueryResult(data) {
   const rows = data?.rows ?? [];
   const columns = data?.columns ?? [];
+  const resultSets = data?.resultSets ?? data?.result_sets ?? [];
   return {
     columns,
     rows,
     limited: Boolean(data?.limited),
     rowCount: data?.rowCount ?? data?.row_count ?? rows.length,
+    resultSets: resultSets.map((set, idx) => ({
+      statementIndex: set.statementIndex ?? set.statement_index ?? idx + 1,
+      columns: set.columns ?? [],
+      rows: set.rows ?? [],
+      limited: Boolean(set.limited),
+      rowCount: set.rowCount ?? set.row_count ?? (set.rows ?? []).length,
+    })),
   };
 }
 
@@ -781,17 +817,31 @@ async function loadSqlFiles() {
   }
 }
 
-async function loadSqlScripts() {
+async function loadSqlScripts({ notify = false } = {}) {
   if (!els.historyList) return;
+
+  const refreshBtn = els.refreshSqlScriptsBtn;
+  const previousText = refreshBtn?.textContent;
+  if (refreshBtn) {
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = "刷新中...";
+  }
+  updateHistoryHint(sqlScriptList.length, "刷新中...");
 
   try {
     const payload = await apiFetch(appState, "/api/mysql/scripts", { method: "GET" });
     sqlScriptList = payload.data || [];
     renderHistory();
+    if (notify) showToast(`已刷新 ${sqlScriptList.length} 个 SQL 脚本`);
   } catch (err) {
     sqlScriptList = [];
     renderHistory();
     showToast(`加载 SQL 脚本失败：${err.message}`, false);
+  } finally {
+    if (refreshBtn) {
+      refreshBtn.disabled = false;
+      refreshBtn.textContent = previousText || "刷新";
+    }
   }
 }
 
@@ -814,9 +864,13 @@ function formatHistoryStats(item) {
   return parts.join(" · ");
 }
 
-function updateHistoryHint(count) {
+function updateHistoryHint(count, overrideText = null) {
   const hint = $("historyHint");
   if (!hint) return;
+  if (overrideText) {
+    hint.textContent = overrideText;
+    return;
+  }
   hint.textContent = count
     ? `共 ${count} 个脚本 · 点击填入编辑器 · SQL 区可选中复制`
     : "backend/scripts 下暂无 SQL 脚本";
@@ -861,15 +915,7 @@ function renderHistory() {
           body: JSON.stringify({ file_path: item.path }),
         });
         const script = payload.data;
-        if (isTemplate) {
-          switchTab("execute");
-          const editor = getEditor("executeEditor");
-          if (editor) editor.value = script.sql || "";
-        } else {
-          switchTab("query");
-          const editor = getEditor("queryEditor");
-          if (editor) editor.value = script.sql || "";
-        }
+        loadScriptIntoEditor(script);
         showToast("已加载 SQL 脚本");
       } catch (err) {
         showToast(`加载 SQL 脚本失败：${err.message}`, false);
@@ -882,9 +928,7 @@ function renderHistory() {
           method: "POST",
           body: JSON.stringify({ file_path: item.path }),
         });
-        switchTab("execute");
-        const editor = getEditor("executeEditor");
-        if (editor) editor.value = payload.data?.sql || "";
+        loadScriptIntoEditor(payload.data, true);
         showToast("已加载到执行编辑器");
       } catch (err) {
         showToast(`加载 SQL 脚本失败：${err.message}`, false);
@@ -1018,6 +1062,49 @@ function sortedRows() {
   return rows;
 }
 
+function renderRowsTable(columns, rows) {
+  if (!columns.length) return '<div class="wb-empty">无数据</div>';
+
+  const thead = columns.map((col) => `<th>${escapeHtml(col)}</th>`).join("");
+  const tbody = rows
+    .map((row) => {
+      const cells = columns
+        .map((col) => {
+          const value = row[col];
+          const text = value == null ? "NULL" : typeof value === "object" ? JSON.stringify(value) : String(value);
+          return `<td class="copyable" data-copy="${escapeHtml(text)}">${escapeHtml(text)}</td>`;
+        })
+        .join("");
+      return `<tr>${cells}</tr>`;
+    })
+    .join("");
+
+  return `<table class="wb-table"><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`;
+}
+
+function renderAdditionalResultSets() {
+  const sets = queryResult.resultSets || [];
+  if (sets.length <= 1) return "";
+
+  return sets
+    .slice(1)
+    .map((set, idx) => {
+      const limited = set.limited ? '<span class="wb-chip warn">结果已截断</span>' : "";
+      return `
+        <div class="wb-result-section">
+          <div class="wb-result-meta">
+            <span class="wb-chip">结果集 ${idx + 2}</span>
+            <span class="wb-chip">${set.rowCount} 行</span>
+            <span class="wb-chip">${set.columns.length} 列</span>
+            ${limited}
+          </div>
+          ${renderRowsTable(set.columns, set.rows)}
+        </div>
+      `;
+    })
+    .join("");
+}
+
 function renderQueryTable() {
   const rows = sortedRows();
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
@@ -1029,10 +1116,11 @@ function renderQueryTable() {
     <span class="wb-chip">${queryResult.rowCount} 行</span>
     ${queryResult.limited ? '<span class="wb-chip warn">结果已截断 (后端 LIMIT)</span>' : ""}
     <span class="wb-chip">${queryResult.columns.length} 列</span>
+    ${(queryResult.resultSets?.length || 0) > 1 ? `<span class="wb-chip">${queryResult.resultSets.length} 个结果集</span>` : ""}
   `;
 
   if (!queryResult.columns.length) {
-    els.queryTableWrap.innerHTML = '<div class="wb-empty">无数据</div>';
+    els.queryTableWrap.innerHTML = `<div class="wb-empty">无数据</div>${renderAdditionalResultSets()}`;
     els.queryPageInfo.textContent = "第 0 / 0 页";
     return;
   }
@@ -1057,10 +1145,10 @@ function renderQueryTable() {
     })
     .join("");
 
-  els.queryTableWrap.innerHTML = `<table class="wb-table"><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`;
+  els.queryTableWrap.innerHTML = `<table class="wb-table"><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>${renderAdditionalResultSets()}`;
   els.queryPageInfo.textContent = `第 ${queryPage} / ${totalPages} 页`;
 
-  els.queryTableWrap.querySelectorAll("th").forEach((th) => {
+  els.queryTableWrap.querySelectorAll("th[data-col]").forEach((th) => {
     th.addEventListener("click", () => {
       const col = th.dataset.col;
       if (querySort.column === col) querySort.asc = !querySort.asc;
@@ -1936,8 +2024,8 @@ function bindEvents() {
     seedQueryEditor();
   });
 
-  els.historyFavoriteOnly.addEventListener("change", renderHistory);
-  $("refreshSqlScriptsBtn")?.addEventListener("click", loadSqlScripts);
+  els.historyFavoriteOnly?.addEventListener("change", renderHistory);
+  els.refreshSqlScriptsBtn?.addEventListener("click", () => loadSqlScripts({ notify: true }));
   els.importPathSelect?.addEventListener("change", renderConnections);
   els.importPath?.addEventListener("input", renderConnections);
   $("refreshSqlFilesBtn")?.addEventListener("click", loadSqlFiles);

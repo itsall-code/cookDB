@@ -114,8 +114,12 @@ function flushDbConfirmText(conn) {
 }
 
 function isDangerousSql(sql) {
-  const trimmed = sql.trim().toLowerCase();
-  return ["delete", "truncate", "drop"].some((p) => trimmed.startsWith(p));
+  return String(sql || "")
+    .split(";")
+    .some((statement) => {
+      const trimmed = statement.trim().toLowerCase();
+      return ["delete", "truncate", "drop"].some((p) => trimmed.startsWith(p));
+    });
 }
 
 function formatBytes(bytes) {

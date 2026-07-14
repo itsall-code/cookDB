@@ -700,6 +700,14 @@ button:disabled {
   color: #8a5a12;
 }
 
+.wb-result-section {
+  margin-top: 18px;
+}
+
+.wb-result-section .wb-result-meta {
+  margin-bottom: 8px;
+}
+
 .wb-table-wrap {
   border: 1px solid var(--wb-border);
   border-radius: var(--wb-radius-sm);
