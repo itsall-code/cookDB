@@ -430,7 +430,26 @@ SELECT * FROM account LIMIT 20
 
 这是高风险操作，不可恢复。
 
-### 4.8 SQL 历史
+### 4.8 导出备份
+
+用途：把当前连接的 database 导出为 SQL 文件，保存在 `backend/backup/` 目录。
+
+步骤：
+
+1. 打开「导出备份」Tab。
+2. 确认当前连接（须已指定 database）。
+3. 点击「开始导出」。
+4. 查看导出进度（状态、已写入字节、表进度、行数）。
+5. 完成后文件出现在「备份文件」列表，可复制路径。
+
+说明：
+
+- 文件名格式为 `{database}_{时间戳}.sql`。
+- 后端优先调用 `mysqldump`（`--single-transaction --quick`）；未安装时由内置导出器生成（`SHOW CREATE TABLE` + 批量 `INSERT`）。
+- 导出中可点击「取消导出」，未完成的文件会被删除。
+- 导出产物可直接用「导入 SQL 文件」功能恢复。
+
+### 4.9 SQL 历史
 
 工作台会记录查询/执行历史。
 
@@ -558,6 +577,10 @@ Popup 的「更新信息」Tab 用于生成固定格式的更新说明。
 | POST | `/api/mysql/import-file` | 启动 SQL 导入 |
 | POST | `/api/mysql/import-file/status` | 查询导入进度 |
 | POST | `/api/mysql/import-file/cancel` | 取消导入 |
+| GET | `/api/mysql/backups` | 列出 backend/backup 备份文件 |
+| POST | `/api/mysql/export` | 启动数据库导出（备份） |
+| POST | `/api/mysql/export/status` | 查询导出进度 |
+| POST | `/api/mysql/export/cancel` | 取消导出 |
 
 ### 7.4 账号本地化
 

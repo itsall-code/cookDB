@@ -53,6 +53,18 @@ const els = {
   batchFlushSavedHint: $("batchFlushSavedHint"),
   flushBatchMeta: $("flushBatchMeta"),
   flushSingleMeta: $("flushSingleMeta"),
+  exportMeta: $("exportMeta"),
+  exportProgressPanel: $("exportProgressPanel"),
+  exportStatus: $("exportStatus"),
+  exportBytes: $("exportBytes"),
+  exportTables: $("exportTables"),
+  exportRows: $("exportRows"),
+  exportCurrentTable: $("exportCurrentTable"),
+  exportElapsed: $("exportElapsed"),
+  exportResultHint: $("exportResultHint"),
+  backupList: $("backupList"),
+  backupEmptyHint: $("backupEmptyHint"),
+  backupListSummary: $("backupListSummary"),
   toast: $("toast"),
 };
 
@@ -84,6 +96,11 @@ let batchFlushSaveHintTimer = null;
 let lookupTables = [];
 let sqlFileList = [];
 let sqlScriptList = [];
+let exportJobId = null;
+let exportPollTimer = null;
+let exportPollInFlight = false;
+let exportTerminalHandled = false;
+let backupFileList = [];
 
 function getImportPath() {
   const custom = els.importPath?.value.trim();
@@ -314,11 +331,13 @@ function renderConnections() {
   if (!conn) {
     els.connectionMeta.textContent = connHtml;
     if (els.flushSingleMeta) els.flushSingleMeta.innerHTML = connHtml;
+    if (els.exportMeta) els.exportMeta.innerHTML = connHtml;
     return;
   }
 
   els.connectionMeta.innerHTML = connHtml;
   if (els.flushSingleMeta) els.flushSingleMeta.innerHTML = connHtml;
+  if (els.exportMeta) els.exportMeta.innerHTML = connHtml;
 
   const filePath = getImportPath();
   if (els.importConfirmHint) {
@@ -957,6 +976,9 @@ function switchTab(tab) {
   }
   if (tab === "import-batch") {
     renderBatchImportUi();
+  }
+  if (tab === "export" && !backupFileList.length) {
+    loadBackups().catch(() => {});
   }
   if (tab === "flush") {
     renderFlushUi();
@@ -2012,6 +2034,230 @@ async function cancelImport() {
   }
 }
 
+function exportStatusLabel(status) {
+  switch (normalizeImportStatus(status)) {
+    case "pending":
+      return "等待中";
+    case "running":
+      return "导出中";
+    case "completed":
+      return "已完成";
+    case "failed":
+      return "失败";
+    case "cancelled":
+      return "已取消";
+    default:
+      return status ? String(status) : "空闲";
+  }
+}
+
+function normalizeExportProgress(progress) {
+  if (!progress) return null;
+  return {
+    job_id: progress.job_id ?? progress.jobId ?? null,
+    status: normalizeImportStatus(progress.status),
+    file_path: progress.file_path ?? progress.filePath ?? "",
+    file_name: progress.file_name ?? progress.fileName ?? "",
+    database: progress.database ?? "",
+    bytes_written: progress.bytes_written ?? progress.bytesWritten ?? 0,
+    tables_total: progress.tables_total ?? progress.tablesTotal ?? 0,
+    tables_done: progress.tables_done ?? progress.tablesDone ?? 0,
+    rows_written: progress.rows_written ?? progress.rowsWritten ?? 0,
+    current_table: progress.current_table ?? progress.currentTable ?? null,
+    elapsed_ms: progress.elapsed_ms ?? progress.elapsedMs ?? 0,
+    error: progress.error ?? null,
+  };
+}
+
+function updateExportUi(progress) {
+  if (!els.exportProgressPanel) return;
+  els.exportProgressPanel.hidden = false;
+  els.exportStatus.textContent = exportStatusLabel(progress.status);
+  els.exportBytes.textContent = formatBytes(progress.bytes_written);
+  els.exportTables.textContent = progress.tables_total
+    ? `${progress.tables_done} / ${progress.tables_total}`
+    : progress.tables_done
+      ? String(progress.tables_done)
+      : "--";
+  els.exportRows.textContent = String(progress.rows_written);
+  els.exportCurrentTable.textContent = progress.current_table || "--";
+  els.exportElapsed.textContent = formatDuration(progress.elapsed_ms);
+
+  if (progress.status === "failed") {
+    els.exportResultHint.textContent = progress.error || "导出失败";
+  } else if (progress.status === "completed") {
+    els.exportResultHint.textContent = `已保存：${progress.file_path}`;
+  } else {
+    els.exportResultHint.textContent = progress.file_name ? `目标文件：${progress.file_name}` : "";
+  }
+}
+
+function stopExportPolling() {
+  if (exportPollTimer) {
+    clearInterval(exportPollTimer);
+    exportPollTimer = null;
+  }
+}
+
+function finishExportJob(progress) {
+  if (exportTerminalHandled) return;
+  exportTerminalHandled = true;
+
+  stopExportPolling();
+  exportPollInFlight = false;
+  exportJobId = null;
+  $("cancelExportBtn") && ($("cancelExportBtn").disabled = true);
+  $("startExportBtn") && ($("startExportBtn").disabled = false);
+
+  if (progress.status === "completed") {
+    setStatus(`导出完成 · ${progress.file_name} · ${formatBytes(progress.bytes_written)}`, "ok");
+    showToast(`导出完成：${progress.file_name}`);
+    loadBackups().catch(() => {});
+  } else if (progress.status === "failed") {
+    const message = progress.error || "导出失败";
+    setStatus(message, "error");
+    showToast(message, false);
+  } else {
+    setStatus("导出已取消", "busy");
+    showToast("导出已取消");
+  }
+}
+
+async function pollExportStatus() {
+  if (!exportJobId || exportPollInFlight || exportTerminalHandled) return;
+
+  const pollingJobId = exportJobId;
+  exportPollInFlight = true;
+  try {
+    const payload = await apiFetch(appState, "/api/mysql/export/status", {
+      method: "POST",
+      body: JSON.stringify({ job_id: pollingJobId }),
+    });
+    if (pollingJobId !== exportJobId || exportTerminalHandled) return;
+
+    const progress = normalizeExportProgress(payload.data);
+    updateExportUi(progress);
+    if (["completed", "failed", "cancelled"].includes(progress.status)) {
+      finishExportJob(progress);
+    }
+  } catch (err) {
+    if (exportTerminalHandled || pollingJobId !== exportJobId) return;
+    if (els.exportStatus) els.exportStatus.textContent = "轮询中断，重试中…";
+  } finally {
+    exportPollInFlight = false;
+  }
+}
+
+async function startExport() {
+  const conn = getActiveConnection();
+  if (!conn) return showToast("请先在设置页添加 MySQL 连接", false);
+  if (!conn.database) return showToast(`连接「${conn.name}」未指定 database，无法导出`, false);
+  if (exportJobId) return showToast("已有导出任务进行中", false);
+
+  exportTerminalHandled = false;
+  stopExportPolling();
+
+  setStatus(`正在启动导出：${conn.name} → ${conn.database}`, "busy");
+  try {
+    const payload = await apiFetch(
+      appState,
+      "/api/mysql/export",
+      {
+        method: "POST",
+        body: JSON.stringify({ target: connectionToTarget(conn) }),
+      },
+      LONG_TIMEOUT
+    );
+    const progress = normalizeExportProgress(payload.data);
+    exportJobId = progress?.job_id;
+    if (!exportJobId) {
+      throw new Error("后端未返回 job_id，请确认后端已重新编译并重启");
+    }
+
+    updateExportUi(progress);
+    $("cancelExportBtn") && ($("cancelExportBtn").disabled = false);
+    $("startExportBtn") && ($("startExportBtn").disabled = true);
+    exportPollTimer = setInterval(pollExportStatus, IMPORT_POLL_INTERVAL);
+    pollExportStatus();
+    showToast("导出任务已启动");
+  } catch (err) {
+    setStatus(err.message, "error");
+    showToast(err.message, false);
+  }
+}
+
+async function cancelExport() {
+  if (!exportJobId) return;
+  try {
+    await apiFetch(appState, "/api/mysql/export/cancel", {
+      method: "POST",
+      body: JSON.stringify({ job_id: exportJobId }),
+    });
+    showToast("已请求取消导出");
+  } catch (err) {
+    showToast(err.message, false);
+  }
+}
+
+function formatBackupTime(ms) {
+  if (!ms) return "";
+  try {
+    return new Date(ms).toLocaleString("zh-CN", {
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
+function renderBackupList() {
+  const list = els.backupList;
+  if (!list) return;
+
+  list.innerHTML = "";
+  if (els.backupListSummary) {
+    els.backupListSummary.textContent = backupFileList.length ? `${backupFileList.length} 个文件` : "";
+  }
+  if (!backupFileList.length) {
+    if (els.backupEmptyHint) els.backupEmptyHint.hidden = false;
+    return;
+  }
+  if (els.backupEmptyHint) els.backupEmptyHint.hidden = true;
+
+  backupFileList.forEach((file) => {
+    const row = document.createElement("div");
+    row.className = "wb-batch-history-item";
+    row.innerHTML = `
+      <div class="wb-batch-history-main">
+        <div class="wb-batch-history-summary">${escapeHtml(file.name)}</div>
+        <div class="wb-batch-history-meta">${formatBytes(file.size)} · ${formatBackupTime(file.modified_ms ?? file.modifiedMs)}</div>
+      </div>
+      <div class="wb-batch-history-actions">
+        <button type="button" class="secondary" data-backup-copy="${escapeHtml(file.path)}">复制路径</button>
+      </div>
+    `;
+    list.appendChild(row);
+  });
+}
+
+async function loadBackups({ notify = false } = {}) {
+  if (!els.backupList) return;
+  try {
+    const payload = await apiFetch(appState, "/api/mysql/backups", { method: "GET" });
+    backupFileList = payload.data || [];
+    renderBackupList();
+    if (notify) showToast(`已刷新，共 ${backupFileList.length} 个备份文件`);
+  } catch (err) {
+    backupFileList = [];
+    renderBackupList();
+    showToast(`加载备份列表失败：${err.message}`, false);
+  }
+}
+
 function bindEvents() {
   document.querySelectorAll(".wb-tabs button").forEach((btn) => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
@@ -2153,6 +2399,15 @@ function bindEvents() {
   $("cancelBatchImportBtn")?.addEventListener("click", cancelImport);
   $("cancelBatchFlushBtn")?.addEventListener("click", cancelBatchFlush);
   $("flushDbBtn")?.addEventListener("click", flushDatabase);
+  $("startExportBtn")?.addEventListener("click", startExport);
+  $("cancelExportBtn")?.addEventListener("click", cancelExport);
+  $("refreshBackupsBtn")?.addEventListener("click", () => loadBackups({ notify: true }));
+  els.backupList?.addEventListener("click", async (event) => {
+    const copyBtn = event.target.closest("[data-backup-copy]");
+    if (!copyBtn) return;
+    await navigator.clipboard.writeText(copyBtn.dataset.backupCopy || "");
+    showToast("已复制文件路径");
+  });
 
   document.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {

@@ -43,9 +43,7 @@ pub fn tracing_use_ansi() -> bool {
     #[cfg(windows)]
     {
         // Windows Terminal / VS Code / Cursor integrated terminal
-        if std::env::var_os("WT_SESSION").is_some()
-            || std::env::var_os("TERM_PROGRAM").is_some()
-        {
+        if std::env::var_os("WT_SESSION").is_some() || std::env::var_os("TERM_PROGRAM").is_some() {
             return std::io::IsTerminal::is_terminal(&std::io::stdout());
         }
         // Classic cmd.exe: prefer plain text to avoid escape-sequence garbage

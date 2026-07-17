@@ -9,13 +9,13 @@ use crate::{
     models::{
         mysql::MySqlConfig,
         request::{
-            MySqlColumnsRequest, MySqlExecuteRequest, MySqlFlushDbRequest, MySqlImportFileRequest,
-            MySqlImportJobRequest, MySqlLookupRequest, MySqlQueryRequest, MySqlScriptRequest,
-            MySqlTableListRequest,
+            MySqlColumnsRequest, MySqlExecuteRequest, MySqlExportJobRequest, MySqlExportRequest,
+            MySqlFlushDbRequest, MySqlImportFileRequest, MySqlImportJobRequest, MySqlLookupRequest,
+            MySqlQueryRequest, MySqlScriptRequest, MySqlTableListRequest,
         },
         response::ApiResponse,
     },
-    services::{mysql_import, mysql_scripts, mysql_service},
+    services::{mysql_export, mysql_import, mysql_scripts, mysql_service},
     utils::log_util::mysql_target,
 };
 
@@ -35,6 +35,10 @@ pub fn routes() -> Router {
         .route("/api/mysql/import-file", post(start_import_file))
         .route("/api/mysql/import-file/status", post(import_file_status))
         .route("/api/mysql/import-file/cancel", post(cancel_import_file))
+        .route("/api/mysql/backups", get(list_backups))
+        .route("/api/mysql/export", post(start_export))
+        .route("/api/mysql/export/status", post(export_status))
+        .route("/api/mysql/export/cancel", post(cancel_export))
 }
 
 async fn ping() -> Json<ApiResponse<String>> {
@@ -215,5 +219,49 @@ async fn cancel_import_file(
     Ok(Json(ApiResponse::ok_with_message(
         progress,
         "Import cancellation requested".to_string(),
+    )))
+}
+
+async fn list_backups() -> Result<Json<ApiResponse<Vec<mysql_export::BackupFileEntry>>>, AppError> {
+    let files = mysql_export::list_backups().await?;
+    Ok(Json(ApiResponse::ok_with_message(
+        files,
+        "Listed backup files".to_string(),
+    )))
+}
+
+async fn start_export(
+    Json(req): Json<MySqlExportRequest>,
+) -> Result<Json<ApiResponse<mysql_export::MySqlExportProgress>>, AppError> {
+    info!(target = %mysql_target(&req.target), "api mysql export");
+    let progress = mysql_export::start_export(&req.target).await?;
+    info!(job_id = %progress.job_id, "api mysql export started");
+    Ok(Json(ApiResponse::ok_with_message(
+        progress,
+        "MySQL export started".to_string(),
+    )))
+}
+
+async fn export_status(
+    Json(req): Json<MySqlExportJobRequest>,
+) -> Result<Json<ApiResponse<mysql_export::MySqlExportProgress>>, AppError> {
+    debug!(job_id = %req.job_id, "api mysql export status");
+    let progress = mysql_export::get_export_progress(&req.job_id)
+        .await
+        .ok_or_else(|| AppError::BadRequest("export job not found".to_string()))?;
+    Ok(Json(ApiResponse::ok_with_message(
+        progress,
+        "Export status".to_string(),
+    )))
+}
+
+async fn cancel_export(
+    Json(req): Json<MySqlExportJobRequest>,
+) -> Result<Json<ApiResponse<mysql_export::MySqlExportProgress>>, AppError> {
+    warn!(job_id = %req.job_id, "api mysql export cancel");
+    let progress = mysql_export::cancel_export(&req.job_id).await?;
+    Ok(Json(ApiResponse::ok_with_message(
+        progress,
+        "Export cancellation requested".to_string(),
     )))
 }

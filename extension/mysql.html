@@ -13,7 +13,7 @@
       <div class="wb-brand">
           <p class="eyebrow">Cook-DB · 数据联调</p>
           <h1>MySQL 工作台</h1>
-          <p>查询、执行与 SQL 导入。大文件由后端流式解析，不经浏览器上传。</p>
+          <p>查询、执行、SQL 导入与导出备份。大文件由后端流式解析，不经浏览器上传。</p>
       </div>
 
       <div class="wb-panel">
@@ -65,6 +65,7 @@
           <button type="button" data-tab="execute">执行</button>
           <button type="button" data-tab="import">导入 SQL 文件</button>
           <button type="button" data-tab="import-batch">批量导入</button>
+          <button type="button" data-tab="export">导出备份</button>
           <button type="button" data-tab="flush">清库</button>
         </div>
 
@@ -211,6 +212,75 @@
                 </div>
               </section>
             </div>
+          </div>
+        </div>
+
+        <div id="tab-export" class="wb-tab-panel">
+          <div class="wb-ops-workbench">
+            <header class="wb-ops-header">
+              <p class="wb-ops-eyebrow">数据备份</p>
+              <h3 class="wb-ops-title">导出数据库</h3>
+              <p class="wb-ops-desc">把左侧栏当前选中连接的目标库导出为 SQL 文件，保存在 backend/backup 目录。优先使用 mysqldump，未安装时由后端内置导出器生成。</p>
+            </header>
+
+            <section class="wb-ops-card">
+              <div class="wb-ops-card-head">
+                <h4 class="wb-ops-card-title">当前连接</h4>
+                <p class="wb-ops-card-desc">导出上方所选 MySQL 连接的目标库</p>
+              </div>
+              <div id="exportMeta" class="wb-ops-target-meta"></div>
+              <div class="wb-ops-card-actions">
+                <button type="button" class="primary" id="startExportBtn">开始导出</button>
+                <button type="button" class="danger" id="cancelExportBtn" disabled>取消导出</button>
+              </div>
+            </section>
+
+            <div id="exportProgressPanel" class="wb-progress-card" hidden>
+              <h4>导出进度</h4>
+              <div class="wb-stat-grid">
+                <div class="wb-stat">
+                  <div class="label">状态</div>
+                  <div class="value" id="exportStatus">空闲</div>
+                </div>
+                <div class="wb-stat">
+                  <div class="label">已写入</div>
+                  <div class="value" id="exportBytes">0 B</div>
+                </div>
+                <div class="wb-stat">
+                  <div class="label">表进度</div>
+                  <div class="value" id="exportTables">--</div>
+                </div>
+                <div class="wb-stat">
+                  <div class="label">已写行数</div>
+                  <div class="value" id="exportRows">0</div>
+                </div>
+                <div class="wb-stat">
+                  <div class="label">当前表</div>
+                  <div class="value" id="exportCurrentTable">--</div>
+                </div>
+                <div class="wb-stat">
+                  <div class="label">用时</div>
+                  <div class="value" id="exportElapsed">0s</div>
+                </div>
+              </div>
+              <div id="exportResultHint" class="subtitle" style="margin-top:12px;color:#94a3b8;"></div>
+            </div>
+
+            <section class="wb-batch-section" id="backupListSection">
+              <div class="wb-batch-section-head">
+                <div class="wb-batch-toggle-text" style="padding:12px 0;">
+                  <span class="wb-batch-toggle-title">备份文件（backend/backup）</span>
+                  <span id="backupListSummary" class="wb-batch-section-summary"></span>
+                </div>
+                <div class="wb-batch-section-actions">
+                  <button type="button" class="secondary" id="refreshBackupsBtn">刷新</button>
+                </div>
+              </div>
+              <div class="wb-batch-section-body">
+                <div id="backupList" class="wb-batch-history-list"></div>
+                <div id="backupEmptyHint" class="wb-batch-empty">暂无备份文件，完成一次导出后会显示在这里</div>
+              </div>
+            </section>
           </div>
         </div>
 

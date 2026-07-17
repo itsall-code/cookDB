@@ -199,6 +199,16 @@ pub struct MySqlImportJobRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MySqlExportRequest {
+    pub target: MySqlConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MySqlExportJobRequest {
+    pub job_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MySqlScriptRequest {
     pub file_path: String,
 }
