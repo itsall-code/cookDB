@@ -59,6 +59,27 @@ async function loadAppState() {
   };
 }
 
+/** Keys that affect Redis/MySQL main UI when changed in options. */
+const APP_CONFIG_STORAGE_KEYS = ["settings", "activeEnv", "mysqlActiveConnectionId"];
+
+/**
+ * Listen for chrome.storage.local config changes from options (or other pages).
+ * Returns an unsubscribe function.
+ */
+function watchAppConfig(onChange) {
+  if (!chrome?.storage?.onChanged || typeof onChange !== "function") {
+    return () => {};
+  }
+  const listener = (changes, areaName) => {
+    if (areaName !== "local") return;
+    const touched = APP_CONFIG_STORAGE_KEYS.filter((key) => key in changes);
+    if (!touched.length) return;
+    onChange(changes, touched);
+  };
+  chrome.storage.onChanged.addListener(listener);
+  return () => chrome.storage.onChanged.removeListener(listener);
+}
+
 function getActiveEnv(state) {
   return state.settings.envs[state.activeEnv] || defaultEnv();
 }

@@ -292,6 +292,7 @@
             <button type="button" data-tab="execute">执行</button>
             <button type="button" data-tab="import">导入</button>
             <button type="button" data-tab="import-batch">批量导入</button>
+            <button type="button" data-tab="export">导出</button>
             <button type="button" data-tab="flush">清库</button>
           </div>
 
@@ -438,6 +439,96 @@
                   </div>
                 </section>
               </div>
+            </div>
+          </div>
+
+          <div id="tab-export" class="wb-tab-panel">
+            <div class="wb-ops-workbench">
+              <header class="wb-ops-header">
+                <h3 class="wb-ops-title">导出数据库</h3>
+                <p class="wb-ops-desc">将当前数据库导出为 SQL 文件，保存到 backend/backup。</p>
+              </header>
+
+              <div class="wb-export-actionbar">
+                <div class="wb-export-target">
+                  <span class="wb-export-target-label">导出目标</span>
+                  <div id="exportMeta" class="wb-export-target-meta"></div>
+                </div>
+                <div class="wb-export-actions">
+                  <button type="button" class="primary" id="startExportBtn">开始导出</button>
+                  <button type="button" class="danger" id="cancelExportBtn" hidden>取消导出</button>
+                </div>
+              </div>
+
+              <section class="wb-batch-section" id="batchExportSection">
+                <div class="wb-batch-section-head">
+                  <div class="wb-batch-toggle-text wb-backup-list-title">
+                    <span class="wb-batch-toggle-title">批量导出</span>
+                    <span id="batchExportSummary" class="wb-batch-section-summary"></span>
+                  </div>
+                  <div class="wb-batch-section-actions">
+                    <button type="button" class="secondary" id="selectAllBatchExportBtn">全选</button>
+                    <button type="button" class="secondary" id="clearBatchExportBtn">清空</button>
+                  </div>
+                </div>
+                <div class="wb-batch-section-body">
+                  <div id="batchExportComposeList" class="wb-batch-compose-list wb-batch-compose-list--compact"></div>
+                  <div class="wb-ops-actionbar wb-batch-export-actionbar">
+                    <div class="wb-ops-actionbar-main">
+                      <button type="button" class="primary" id="startBatchExportBtn">开始批量导出</button>
+                      <button type="button" class="danger" id="cancelBatchExportBtn" hidden>取消</button>
+                    </div>
+                    <div id="batchExportMeta" class="wb-ops-run-meta"></div>
+                  </div>
+                </div>
+              </section>
+
+              <div id="exportProgressPanel" class="wb-progress-card" hidden>
+                <h4>导出进度</h4>
+                <div class="wb-stat-grid">
+                  <div class="wb-stat">
+                    <div class="label">状态</div>
+                    <div class="value" id="exportStatus">空闲</div>
+                  </div>
+                  <div class="wb-stat">
+                    <div class="label">已写入</div>
+                    <div class="value" id="exportBytes">0 B</div>
+                  </div>
+                  <div class="wb-stat">
+                    <div class="label">表进度</div>
+                    <div class="value" id="exportTables">--</div>
+                  </div>
+                  <div class="wb-stat">
+                    <div class="label">已写行数</div>
+                    <div class="value" id="exportRows">0</div>
+                  </div>
+                  <div class="wb-stat">
+                    <div class="label">当前表</div>
+                    <div class="value" id="exportCurrentTable">--</div>
+                  </div>
+                  <div class="wb-stat">
+                    <div class="label">用时</div>
+                    <div class="value" id="exportElapsed">0s</div>
+                  </div>
+                </div>
+                <div id="exportResultHint" class="wb-export-result-hint"></div>
+              </div>
+
+              <section class="wb-batch-section" id="backupListSection">
+                <div class="wb-batch-section-head">
+                  <div class="wb-batch-toggle-text wb-backup-list-title">
+                    <span class="wb-batch-toggle-title">备份文件</span>
+                    <span id="backupListSummary" class="wb-batch-section-summary"></span>
+                  </div>
+                  <div class="wb-batch-section-actions">
+                    <button type="button" class="secondary" id="refreshBackupsBtn">刷新</button>
+                  </div>
+                </div>
+                <div class="wb-batch-section-body">
+                  <div id="backupList" class="wb-batch-history-list"></div>
+                  <div id="backupEmptyHint" class="wb-batch-empty">暂无备份文件，完成一次导出后会显示在这里</div>
+                </div>
+              </section>
             </div>
           </div>
 

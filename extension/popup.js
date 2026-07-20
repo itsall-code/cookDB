@@ -629,7 +629,7 @@ function renderEnvSummary() {
   `;
 }
 
-async function fillDefaults() {
+async function fillDefaults({ force = false } = {}) {
   const single = buildServerConfig();
   const batch = buildServerConfig();
   const env = getActiveEnv();
@@ -645,12 +645,34 @@ async function fillDefaults() {
   if (els.batchGroup) els.batchGroup.value = batch.group || single.group || "";
 
   const hashName = env.defaultHashName || "Account";
-  if (els.hashName) els.hashName.value = els.hashName.value || hashName;
-  if (els.batchHashName) els.batchHashName.value = els.batchHashName.value || hashName;
-  if (els.viewHashName) els.viewHashName.value = els.viewHashName.value || hashName;
-  if (els.deleteKeys && !els.deleteKeys.value) els.deleteKeys.value = (env.defaultDeleteKeys || []).join("\n");
-  if (els.deleteTables && !els.deleteTables.value) els.deleteTables.value = (env.defaultTables || []).join("\n");
+  if (els.hashName) els.hashName.value = force ? hashName : (els.hashName.value || hashName);
+  if (els.batchHashName) els.batchHashName.value = force ? hashName : (els.batchHashName.value || hashName);
+  if (els.viewHashName) els.viewHashName.value = force ? hashName : (els.viewHashName.value || hashName);
+  if (els.deleteKeys && (force || !els.deleteKeys.value)) {
+    els.deleteKeys.value = (env.defaultDeleteKeys || []).join("\n");
+  }
+  if (els.deleteTables && (force || !els.deleteTables.value)) {
+    els.deleteTables.value = (env.defaultTables || []).join("\n");
+  }
   renderEnvSummary();
+}
+
+let syncingConfig = false;
+
+async function syncConfigFromStorage({ notify = false } = {}) {
+  if (syncingConfig) return;
+  syncingConfig = true;
+  try {
+    appState = await loadAppState();
+    await refreshEnvSelect();
+    await fillDefaults({ force: notify });
+    await refreshBackendStatus();
+    if (notify) appendLog("系统配置已同步到主界面", "ok");
+  } catch (error) {
+    appendLog(`同步配置失败：${error.message}`, "error");
+  } finally {
+    syncingConfig = false;
+  }
 }
 
 async function persistCurrentEnv() {
@@ -991,5 +1013,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     appendLog(`插件初始化失败：${error.message}`, "error");
     setBackendStatus(`初始化失败：${error.message}`, false, true);
   }
+
+  watchAppConfig((changes) => {
+    // Ignore connection-id-only updates from MySQL panel; Redis UI doesn't need them.
+    if (!("settings" in changes) && !("activeEnv" in changes)) return;
+    const notify = "settings" in changes;
+    syncConfigFromStorage({ notify });
+  });
 });
 })();

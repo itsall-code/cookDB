@@ -952,6 +952,70 @@ button:disabled {
   min-width: 0;
 }
 
+.wb-export-actionbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--wb-border);
+  border-radius: var(--wb-radius-sm);
+  background: var(--hc-paper-2);
+}
+
+.wb-export-target {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.wb-export-target-label {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--wb-text);
+}
+
+.wb-export-target-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--wb-muted);
+}
+
+.wb-export-target-meta div + div {
+  margin: 0;
+}
+
+.wb-export-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.wb-export-actions button {
+  width: auto;
+  min-width: 0;
+}
+
+.wb-export-actions button[hidden] {
+  display: none;
+}
+
+.wb-export-result-hint {
+  margin-top: 12px;
+  color: var(--wb-muted);
+  font-size: 12px;
+}
+
+.wb-backup-list-title {
+  padding: 10px 0;
+}
+
 .wb-batch-lead {
   margin: 0;
   color: var(--wb-muted);
@@ -1030,8 +1094,18 @@ button:disabled {
 }
 
 .wb-batch-compose-list--flush .wb-batch-compose-head,
-.wb-batch-compose-list--flush .wb-batch-compose-row {
+.wb-batch-compose-list--flush .wb-batch-compose-row,
+.wb-batch-compose-list--compact .wb-batch-compose-head,
+.wb-batch-compose-list--compact .wb-batch-compose-row {
   grid-template-columns: 52px minmax(0, 1fr);
+}
+
+.wb-batch-export-actionbar {
+  margin-top: 10px;
+}
+
+.wb-batch-export-actionbar button[hidden] {
+  display: none;
 }
 
 .wb-batch-lead--danger {
@@ -1649,6 +1723,11 @@ button:disabled {
     grid-area: sql;
   }
 
+  .wb-batch-compose-list--compact .wb-batch-compose-head,
+  .wb-batch-compose-list--compact .wb-batch-compose-row {
+    grid-template-areas: "check branch";
+  }
+
   .wb-batch-history-item {
     flex-direction: column;
     align-items: stretch;
@@ -1666,6 +1745,16 @@ button:disabled {
 
   .lookup-grid {
     grid-template-columns: 1fr;
+  }
+
+  .wb-export-actionbar,
+  .wb-export-target {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .wb-export-actions button {
+    flex: 1 1 auto;
   }
 }
 

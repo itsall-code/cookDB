@@ -155,7 +155,7 @@ pub async fn start_export(cfg: &MySqlConfig) -> anyhow::Result<MySqlExportProgre
         .to_string();
 
     let backup_dir = resolve_backup_dir()?;
-    let timestamp = sqlx::types::chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let timestamp = sqlx::types::chrono::Local::now().format("%Y%m%d_%H%M%S_%3f");
     let file_name = format!("{database}_{timestamp}.sql");
     let file_path = backup_dir.join(&file_name);
 
